@@ -1,0 +1,11 @@
+[package]
+name = "imgui-rs-vulkan-renderer"
+version = "0.1.0"
+authors = ["Adrien Bennadji <adrien.bennadji@live.fr>"]
+edition = "2018"
+
+[dependencies]
+log = "0.4"
+imgui = "0.2"
+ash = "0.29"
+ultraviolet = "0.4"
