@@ -25,12 +25,14 @@ pub struct Renderer {
     fonts_texture: Texture,
     descriptor_pool: vk::DescriptorPool,
     descriptor_set: vk::DescriptorSet,
-    mesh: Option<Mesh>,
+    in_flight_frames: usize,
+    frames: Option<Frames>,
 }
 
 impl Renderer {
     pub fn new<C: RendererVkContext>(
         vk_context: &C,
+        in_flight_frames: usize,
         render_pass: vk::RenderPass,
         imgui: &mut Context,
     ) -> Result<Self, Box<dyn Error>> {
@@ -84,7 +86,8 @@ impl Renderer {
             fonts_texture,
             descriptor_pool,
             descriptor_set,
-            mesh: None,
+            in_flight_frames,
+            frames: None,
         })
     }
 
@@ -94,10 +97,12 @@ impl Renderer {
         command_buffer: vk::CommandBuffer,
         draw_data: &DrawData,
     ) -> Result<(), Box<dyn Error>> {
-        if self.mesh.is_none() {
-            self.mesh.replace(Mesh::new(vk_context, draw_data)?);
+        if self.frames.is_none() {
+            self.frames
+                .replace(Frames::new(vk_context, draw_data, self.in_flight_frames)?);
         }
-        let mesh = self.mesh.as_mut().unwrap();
+
+        let mesh = self.frames.as_mut().unwrap().next();
         mesh.refresh(vk_context, draw_data)?;
 
         unsafe {
@@ -225,8 +230,8 @@ impl Renderer {
 
     pub fn drop(&mut self, device: &Device) {
         unsafe {
-            if let Some(mesh) = self.mesh.take() {
-                mesh.drop(device);
+            if let Some(mut frames) = self.frames.take() {
+                frames.drop(device);
             }
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
@@ -234,6 +239,40 @@ impl Renderer {
             self.fonts_texture.drop(device);
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
+    }
+}
+
+struct Frames {
+    index: usize,
+    count: usize,
+    meshes: Vec<Mesh>,
+}
+
+impl Frames {
+    fn new<C: RendererVkContext>(
+        vk_context: &C,
+        draw_data: &DrawData,
+        count: usize,
+    ) -> Result<Self, Box<dyn Error>> {
+        let meshes = (0..count)
+            .map(|_| Mesh::new(vk_context, draw_data))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            index: 0,
+            count,
+            meshes,
+        })
+    }
+
+    fn next(&mut self) -> &mut Mesh {
+        let result = &mut self.meshes[self.index];
+        self.index = (self.index + 1) % self.count;
+        result
+    }
+
+    fn drop(&mut self, device: &Device) {
+        self.meshes.iter_mut().for_each(|m| m.drop(device));
+        self.meshes.clear();
     }
 }
 
@@ -332,7 +371,7 @@ mod mesh {
             Ok(())
         }
 
-        pub fn drop(mut self, device: &Device) {
+        pub fn drop(&mut self, device: &Device) {
             self.destroy_indices(device);
             self.destroy_vertices(device);
         }
