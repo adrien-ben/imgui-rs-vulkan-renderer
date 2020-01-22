@@ -9,3 +9,9 @@ log = "0.4"
 imgui = "0.2"
 ash = "0.29"
 ultraviolet = "0.4"
+
+[dev-dependencies]
+simple_logger = "1.4"
+imgui-winit-support = "0.2"
+winit = "0.19"
+raw-window-handle = "0.3"
