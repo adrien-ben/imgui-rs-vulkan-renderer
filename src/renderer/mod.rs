@@ -284,7 +284,7 @@ mod mesh {
         vk, Device,
     };
     use imgui::{DrawData, DrawVert};
-    use std::error::Error;
+    use std::{error::Error, mem::size_of};
 
     pub struct Mesh {
         pub vertices: vk::Buffer,
@@ -311,12 +311,20 @@ mod mesh {
                     .instance()
                     .get_physical_device_memory_properties(vk_context.physical_device())
             };
-            let (vertices, vertices_mem) =
-                create_vertex_buffer(&vertices, vk_context.device(), memory_properties)?;
+            let (vertices, vertices_mem) = create_and_fill_buffer(
+                &vertices,
+                vk_context.device(),
+                vk::BufferUsageFlags::VERTEX_BUFFER,
+                memory_properties,
+            )?;
 
             // Create an index buffer
-            let (indices, indices_mem) =
-                create_index_buffer(&indices, vk_context.device(), memory_properties)?;
+            let (indices, indices_mem) = create_and_fill_buffer(
+                &indices,
+                vk_context.device(),
+                vk::BufferUsageFlags::INDEX_BUFFER,
+                memory_properties,
+            )?;
 
             Ok(Mesh {
                 vertices,
@@ -344,29 +352,37 @@ mod mesh {
                 log::trace!("Resizing vertex buffers");
                 self.destroy_vertices(vk_context.device());
                 let vertex_count = vertices.len();
-                let (vertices, vertices_mem) =
-                    create_vertex_buffer(&vertices, vk_context.device(), memory_properties)?;
+                let size = vertex_count * size_of::<DrawVert>();
+                let (vertices, vertices_mem) = create_buffer(
+                    size,
+                    vk_context.device(),
+                    vk::BufferUsageFlags::VERTEX_BUFFER,
+                    memory_properties,
+                )?;
 
                 self.vertices = vertices;
                 self.vertices_mem = vertices_mem;
                 self.vertex_count = vertex_count;
-            } else {
-                update_buffer_content(vk_context.device(), self.vertices_mem, &vertices)?;
             }
+            update_buffer_content(vk_context.device(), self.vertices_mem, &vertices)?;
 
             let indices = create_indices(draw_data);
             if draw_data.total_idx_count as usize > self.index_count {
                 log::trace!("Resizing index buffers");
                 self.destroy_indices(vk_context.device());
                 let index_count = indices.len();
-                let (indices, indices_mem) =
-                    create_index_buffer(&indices, vk_context.device(), memory_properties)?;
+                let size = index_count * size_of::<u16>();
+                let (indices, indices_mem) = create_buffer(
+                    size,
+                    vk_context.device(),
+                    vk::BufferUsageFlags::INDEX_BUFFER,
+                    memory_properties,
+                )?;
                 self.indices = indices;
                 self.indices_mem = indices_mem;
                 self.index_count = index_count;
-            } else {
-                update_buffer_content(vk_context.device(), self.indices_mem, &indices)?;
             }
+            update_buffer_content(vk_context.device(), self.indices_mem, &indices)?;
 
             Ok(())
         }

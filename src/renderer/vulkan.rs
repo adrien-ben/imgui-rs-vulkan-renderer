@@ -286,44 +286,29 @@ pub fn create_vulkan_descriptor_set(
 mod buffer {
 
     use ash::{version::DeviceV1_0, vk, Device};
-    use imgui::DrawVert;
     use std::error::Error;
     use std::mem;
 
-    pub fn create_vertex_buffer(
-        vertices: &[DrawVert],
-        device: &Device,
-        mem_properties: vk::PhysicalDeviceMemoryProperties,
-    ) -> Result<(vk::Buffer, vk::DeviceMemory), Box<dyn Error>> {
-        create_buffer(
-            vertices,
-            device,
-            vk::BufferUsageFlags::VERTEX_BUFFER,
-            mem_properties,
-        )
-    }
-
-    pub fn create_index_buffer(
-        indices: &[u16],
-        device: &Device,
-        mem_properties: vk::PhysicalDeviceMemoryProperties,
-    ) -> Result<(vk::Buffer, vk::DeviceMemory), Box<dyn Error>> {
-        create_buffer(
-            indices,
-            device,
-            vk::BufferUsageFlags::INDEX_BUFFER,
-            mem_properties,
-        )
-    }
-
-    pub fn create_buffer<T: Copy>(
+    pub fn create_and_fill_buffer<T: Copy>(
         data: &[T],
         device: &Device,
         usage: vk::BufferUsageFlags,
         mem_properties: vk::PhysicalDeviceMemoryProperties,
     ) -> Result<(vk::Buffer, vk::DeviceMemory), Box<dyn Error>> {
+        let size = data.len() * mem::size_of::<T>();
+        let (buffer, memory) = create_buffer(size, device, usage, mem_properties)?;
+        update_buffer_content(device, memory, data)?;
+        Ok((buffer, memory))
+    }
+
+    pub fn create_buffer(
+        size: usize,
+        device: &Device,
+        usage: vk::BufferUsageFlags,
+        mem_properties: vk::PhysicalDeviceMemoryProperties,
+    ) -> Result<(vk::Buffer, vk::DeviceMemory), Box<dyn Error>> {
         let buffer_info = vk::BufferCreateInfo::builder()
-            .size((data.len() * mem::size_of::<T>()) as _)
+            .size(size as _)
             .usage(usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .build();
@@ -341,8 +326,6 @@ mod buffer {
             .memory_type_index(mem_type);
         let memory = unsafe { device.allocate_memory(&alloc_info, None)? };
         unsafe { device.bind_buffer_memory(buffer, memory, 0)? };
-
-        update_buffer_content(device, memory, data)?;
 
         Ok((buffer, memory))
     }
@@ -408,7 +391,7 @@ mod texture {
             format: vk::Format,
             data: &[u8],
         ) -> Result<Self, Box<dyn Error>> {
-            let (buffer, buffer_mem) = create_buffer(
+            let (buffer, buffer_mem) = create_and_fill_buffer(
                 data,
                 device,
                 vk::BufferUsageFlags::TRANSFER_SRC,
