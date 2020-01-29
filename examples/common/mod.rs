@@ -346,7 +346,7 @@ impl System {
 impl Drop for System {
     fn drop(&mut self) {
         unsafe {
-            self.renderer.drop(&self.vulkan_context.device);
+            self.renderer.destroy(&self.vulkan_context);
             self.vulkan_context.device.destroy_fence(self.fence, None);
             self.vulkan_context
                 .device

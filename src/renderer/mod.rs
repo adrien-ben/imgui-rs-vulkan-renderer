@@ -1,14 +1,16 @@
 mod vulkan;
 
+use crate::RendererError;
 use ash::{
     version::{DeviceV1_0, InstanceV1_0},
     vk, Device, Instance,
 };
 use imgui::{Context, DrawCmd, DrawCmdParams, DrawData};
 use mesh::*;
-use std::error::Error;
 use ultraviolet::projection::orthographic_vk;
 use vulkan::*;
+
+pub type RendererResult<T> = Result<T, RendererError>;
 
 pub trait RendererVkContext {
     fn instance(&self) -> &Instance;
@@ -35,7 +37,7 @@ impl Renderer {
         in_flight_frames: usize,
         render_pass: vk::RenderPass,
         imgui: &mut Context,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> RendererResult<Self> {
         // Descriptor set layout
         let descriptor_set_layout = create_vulkan_descriptor_set_layout(vk_context.device())?;
 
@@ -96,14 +98,14 @@ impl Renderer {
         vk_context: &C,
         command_buffer: vk::CommandBuffer,
         draw_data: &DrawData,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> RendererResult<()> {
         if self.frames.is_none() {
             self.frames
                 .replace(Frames::new(vk_context, draw_data, self.in_flight_frames)?);
         }
 
         let mesh = self.frames.as_mut().unwrap().next();
-        mesh.refresh(vk_context, draw_data)?;
+        mesh.update(vk_context, draw_data)?;
 
         unsafe {
             vk_context.device().cmd_bind_pipeline(
@@ -228,15 +230,16 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn drop(&mut self, device: &Device) {
+    pub fn destroy<C: RendererVkContext>(&mut self, context: &C) {
         unsafe {
+            let device = context.device();
             if let Some(mut frames) = self.frames.take() {
-                frames.drop(device);
+                frames.destroy(device);
             }
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_pool(self.descriptor_pool, None);
-            self.fonts_texture.drop(device);
+            self.fonts_texture.destroy(device);
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
     }
@@ -253,7 +256,7 @@ impl Frames {
         vk_context: &C,
         draw_data: &DrawData,
         count: usize,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> RendererResult<Self> {
         let meshes = (0..count)
             .map(|_| Mesh::new(vk_context, draw_data))
             .collect::<Result<Vec<_>, _>>()?;
@@ -270,8 +273,8 @@ impl Frames {
         result
     }
 
-    fn drop(&mut self, device: &Device) {
-        self.meshes.iter_mut().for_each(|m| m.drop(device));
+    fn destroy(&mut self, device: &Device) {
+        self.meshes.iter_mut().for_each(|m| m.destroy(device));
         self.meshes.clear();
     }
 }
@@ -279,12 +282,13 @@ impl Frames {
 mod mesh {
 
     use super::{vulkan::*, RendererVkContext};
+    use crate::RendererResult;
     use ash::{
         version::{DeviceV1_0, InstanceV1_0},
         vk, Device,
     };
     use imgui::{DrawData, DrawVert};
-    use std::{error::Error, mem::size_of};
+    use std::mem::size_of;
 
     pub struct Mesh {
         pub vertices: vk::Buffer,
@@ -299,7 +303,7 @@ mod mesh {
         pub fn new<C: RendererVkContext>(
             vk_context: &C,
             draw_data: &DrawData,
-        ) -> Result<Self, Box<dyn Error>> {
+        ) -> RendererResult<Self> {
             let vertices = create_vertices(draw_data);
             let vertex_count = vertices.len();
             let indices = create_indices(draw_data);
@@ -336,11 +340,11 @@ mod mesh {
             })
         }
 
-        pub fn refresh<C: RendererVkContext>(
+        pub fn update<C: RendererVkContext>(
             &mut self,
             vk_context: &C,
             draw_data: &DrawData,
-        ) -> Result<(), Box<dyn Error>> {
+        ) -> RendererResult<()> {
             let memory_properties = unsafe {
                 vk_context
                     .instance()
@@ -387,7 +391,7 @@ mod mesh {
             Ok(())
         }
 
-        pub fn drop(&mut self, device: &Device) {
+        pub fn destroy(&mut self, device: &Device) {
             self.destroy_indices(device);
             self.destroy_vertices(device);
         }

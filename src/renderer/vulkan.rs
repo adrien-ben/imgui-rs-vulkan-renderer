@@ -1,6 +1,7 @@
+use crate::RendererResult;
 use ash::{version::DeviceV1_0, vk, Device};
 pub use buffer::*;
-use std::{error::Error, ffi::CString, mem};
+use std::{ffi::CString, mem};
 pub use texture::*;
 
 pub fn execute_one_time_commands<R, F: FnOnce(vk::CommandBuffer) -> R>(
@@ -8,7 +9,7 @@ pub fn execute_one_time_commands<R, F: FnOnce(vk::CommandBuffer) -> R>(
     queue: vk::Queue,
     pool: vk::CommandPool,
     executor: F,
-) -> Result<R, Box<dyn Error>> {
+) -> RendererResult<R> {
     let command_buffer = {
         let alloc_info = vk::CommandBufferAllocateInfo::builder()
             .level(vk::CommandBufferLevel::PRIMARY)
@@ -58,7 +59,7 @@ pub unsafe fn any_as_u8_slice<T: Sized>(any: &T) -> &[u8] {
 
 pub fn create_vulkan_descriptor_set_layout(
     device: &Device,
-) -> Result<vk::DescriptorSetLayout, Box<dyn Error>> {
+) -> RendererResult<vk::DescriptorSetLayout> {
     log::debug!("Creating vulkan descriptor set layout");
     let bindings = [vk::DescriptorSetLayoutBinding::builder()
         .binding(0)
@@ -76,7 +77,7 @@ pub fn create_vulkan_descriptor_set_layout(
 pub fn create_vulkan_pipeline_layout(
     device: &Device,
     descriptor_set_layout: vk::DescriptorSetLayout,
-) -> Result<vk::PipelineLayout, Box<dyn Error>> {
+) -> RendererResult<vk::PipelineLayout> {
     use ultraviolet::mat::Mat4;
 
     log::debug!("Creating vulkan pipeline layout");
@@ -98,8 +99,8 @@ pub fn create_vulkan_pipeline(
     device: &Device,
     pipeline_layout: vk::PipelineLayout,
     render_pass: vk::RenderPass,
-) -> Result<vk::Pipeline, Box<dyn Error>> {
-    let entry_point_name = CString::new("main")?;
+) -> RendererResult<vk::Pipeline> {
+    let entry_point_name = CString::new("main").unwrap();
 
     let vertex_shader_source = std::include_bytes!("../shaders/shader.vert.spv");
     let fragment_shader_source = std::include_bytes!("../shaders/shader.frag.spv");
@@ -232,7 +233,7 @@ pub fn create_vulkan_pipeline(
     Ok(pipeline)
 }
 
-fn read_shader_from_source(source: &[u8]) -> Result<Vec<u32>, Box<dyn Error>> {
+fn read_shader_from_source(source: &[u8]) -> RendererResult<Vec<u32>> {
     use std::io::Cursor;
     let mut cursor = Cursor::new(source);
     Ok(ash::util::read_spv(&mut cursor)?)
@@ -242,7 +243,7 @@ pub fn create_vulkan_descriptor_set(
     device: &Device,
     sets_layout: vk::DescriptorSetLayout,
     texture: &texture::Texture,
-) -> Result<(vk::DescriptorPool, vk::DescriptorSet), Box<dyn Error>> {
+) -> RendererResult<(vk::DescriptorPool, vk::DescriptorSet)> {
     log::debug!("Creating vulkan descriptor set");
     let descriptor_pool = {
         let sizes = [vk::DescriptorPoolSize {
@@ -285,8 +286,8 @@ pub fn create_vulkan_descriptor_set(
 
 mod buffer {
 
+    use crate::RendererResult;
     use ash::{version::DeviceV1_0, vk, Device};
-    use std::error::Error;
     use std::mem;
 
     pub fn create_and_fill_buffer<T: Copy>(
@@ -294,7 +295,7 @@ mod buffer {
         device: &Device,
         usage: vk::BufferUsageFlags,
         mem_properties: vk::PhysicalDeviceMemoryProperties,
-    ) -> Result<(vk::Buffer, vk::DeviceMemory), Box<dyn Error>> {
+    ) -> RendererResult<(vk::Buffer, vk::DeviceMemory)> {
         let size = data.len() * mem::size_of::<T>();
         let (buffer, memory) = create_buffer(size, device, usage, mem_properties)?;
         update_buffer_content(device, memory, data)?;
@@ -306,7 +307,7 @@ mod buffer {
         device: &Device,
         usage: vk::BufferUsageFlags,
         mem_properties: vk::PhysicalDeviceMemoryProperties,
-    ) -> Result<(vk::Buffer, vk::DeviceMemory), Box<dyn Error>> {
+    ) -> RendererResult<(vk::Buffer, vk::DeviceMemory)> {
         let buffer_info = vk::BufferCreateInfo::builder()
             .size(size as _)
             .usage(usage)
@@ -334,7 +335,7 @@ mod buffer {
         device: &Device,
         buffer_memory: vk::DeviceMemory,
         data: &[T],
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> RendererResult<()> {
         unsafe {
             let size = (data.len() * mem::size_of::<T>()) as _;
 
@@ -368,9 +369,9 @@ mod buffer {
 mod texture {
 
     use super::buffer::*;
+    use crate::RendererResult;
     use ash::vk;
     use ash::{version::DeviceV1_0, Device};
-    use std::error::Error;
 
     pub struct Texture {
         buffer: vk::Buffer,
@@ -390,7 +391,7 @@ mod texture {
             height: u32,
             format: vk::Format,
             data: &[u8],
-        ) -> Result<Self, Box<dyn Error>> {
+        ) -> RendererResult<Self> {
             let (buffer, buffer_mem) = create_and_fill_buffer(
                 data,
                 device,
@@ -560,7 +561,7 @@ mod texture {
                 sampler,
             })
         }
-        pub fn drop(&mut self, device: &Device) {
+        pub fn destroy(&mut self, device: &Device) {
             unsafe {
                 device.destroy_sampler(self.sampler, None);
                 device.destroy_image_view(self.image_view, None);
