@@ -2,6 +2,8 @@
 
 A Vulkan renderer for [imgui-rs][imgui-rs] using [Ash][ash].
 
+![screenshot][screenshot]
+
 ## How it works
 
 The renderer records drawing command to a command buffer supplied by the application. Here is a little breakdown of the features of this crate and how they work.
@@ -88,3 +90,4 @@ cargo run --example <example>
 
 [imgui-rs]: https://github.com/Gekkio/imgui-rs
 [ash]: https://github.com/MaikKlein/ash
+[screenshot]: ./Capture.PNG
