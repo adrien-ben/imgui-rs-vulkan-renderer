@@ -342,6 +342,7 @@ impl Renderer {
             self.fonts_texture.destroy(device);
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
+        self.destroyed = true;
 
         Ok(())
     }
