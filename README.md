@@ -1,5 +1,6 @@
 # imgui-rs-vulkan-renderer
 
+[![Version](https://img.shields.io/crates/v/imgui-rs-vulkan-renderer.svg)](https://crates.io/crates/imgui-rs-vulkan-renderer)
 [![Docs.rs](https://docs.rs/imgui-rs-vulkan-renderer/badge.svg)](https://docs.rs/imgui-rs-vulkan-renderer)
 [![Build Status](https://github.com/adrien-ben/imgui-rs-vulkan-renderer/workflows/Cross-platform%20build/badge.svg)](https://github.com/adrien-ben/imgui-rs-vulkan-renderer/actions)
 [![Publish Status](https://github.com/adrien-ben/imgui-rs-vulkan-renderer/workflows/Publish/badge.svg)](https://github.com/adrien-ben/imgui-rs-vulkan-renderer/actions)
