@@ -10,16 +10,52 @@ use mesh::*;
 use ultraviolet::projection::orthographic_vk;
 use vulkan::*;
 
+/// Convenient return type for function that can return a [`RendererError`].
+///
+/// [`RendererError`]: enum.RendererError.html
 pub type RendererResult<T> = Result<T, RendererError>;
 
+/// Trait providing access to the application's Vulkan context.
 pub trait RendererVkContext {
+    /// Return a reference to the Vulkan instance.
     fn instance(&self) -> &Instance;
+
+    /// Return the Vulkan physical device.
     fn physical_device(&self) -> vk::PhysicalDevice;
+
+    /// Return a reference to the Vulkan device.
     fn device(&self) -> &Device;
-    fn graphics_queue(&self) -> vk::Queue;
+
+    /// Return a Vulkan queue.
+    ///
+    /// It will be used to submit commands during initialization to upload
+    /// data to the gpu. The type of queue must be supported by the following
+    /// commands:
+    ///
+    /// * [vkCmdCopyBufferToImage](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html)
+    /// * [vkCmdPipelineBarrier](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPipelineBarrier.html)
+    fn queue(&self) -> vk::Queue;
+
+    /// Return a Vulkan command pool.
+    ///
+    /// The pool will be used to allocate command buffers to upload textures to the gpu.
     fn command_pool(&self) -> vk::CommandPool;
 }
 
+/// Vulkan renderer for imgui.
+///
+/// It records rendering command to the provided command buffer at each call to [`cmd_draw`].
+/// When done with the renderer you should call [`destroy`] before droping it to release all
+/// Vulkan resources held by the renderer.
+///
+/// All methods take a reference to a type implementing the [`RendererVkContext`] trait.
+///
+/// The renderer holds a set of vertex/index buffers per in flight frames. Vertex and index buffers
+/// are resized at each call to [`cmd_draw`] if draw data does not fit.
+///
+/// [`cmd_draw`]: #method.cmd_draw
+/// [`destroy`]: #method.destroy
+/// [`RendererVkContext`]: trait.RendererVkContext.html
 pub struct Renderer {
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
@@ -29,15 +65,41 @@ pub struct Renderer {
     descriptor_set: vk::DescriptorSet,
     in_flight_frames: usize,
     frames: Option<Frames>,
+    destroyed: bool,
 }
 
 impl Renderer {
+    /// Initialize and return a new instance of the renderer.
+    ///
+    /// At initialization all Vulkan resources are initialized and font texture is created and
+    /// uploaded to the gpu. Vertex and index buffers are not created yet.
+    ///
+    /// # Arguments
+    ///
+    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `in_flight_frames` - The number of in flight frames of the application.
+    /// * `render_pass` - The render pass used to render the gui.
+    /// * `imgui` - The imgui context.
+    ///
+    /// # Errors
+    ///
+    /// * [`RendererError`] - If the number of in flight frame in incorrect.
+    /// * [`RendererError`] - If any Vulkan or io error is encountered during initialization.
+    ///
+    /// [`RendererVkContext`]: trait.RendererVkContext.html
+    /// [`RendererError`]: enum.RendererError.html
     pub fn new<C: RendererVkContext>(
         vk_context: &C,
         in_flight_frames: usize,
         render_pass: vk::RenderPass,
         imgui: &mut Context,
     ) -> RendererResult<Self> {
+        if in_flight_frames == 0 {
+            return Err(RendererError::Init(String::from(
+                "'in_flight_frames' parameter should be at least one",
+            )));
+        }
+
         // Descriptor set layout
         let descriptor_set_layout = create_vulkan_descriptor_set_layout(vk_context.device())?;
 
@@ -58,7 +120,7 @@ impl Renderer {
 
             execute_one_time_commands(
                 vk_context.device(),
-                vk_context.graphics_queue(),
+                vk_context.queue(),
                 vk_context.command_pool(),
                 |buffer| {
                     Texture::cmd_from_rgba(
@@ -90,15 +152,36 @@ impl Renderer {
             descriptor_set,
             in_flight_frames,
             frames: None,
+            destroyed: false,
         })
     }
 
+    /// Record commands required to render the gui.RendererError.
+    ///
+    /// # Arguments
+    ///
+    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `command_buffer` - The Vulkan command buffer that command will be recorded to.
+    /// * `draw_data` - A reference to the imgui `DrawData` containing rendering data.
+    ///
+    /// # Errors
+    ///
+    /// * [`RendererError`] - If any Vulkan is encountered during command recording.
+    /// * [`RendererError`] - If the method is call after [`destroy`] was called.
+    ///
+    /// [`RendererVkContext`]: trait.RendererVkContext.html
+    /// [`RendererError`]: enum.RendererError.html
+    /// [`destroy`]: #method.destroy
     pub fn cmd_draw<C: RendererVkContext>(
         &mut self,
         vk_context: &C,
         command_buffer: vk::CommandBuffer,
         draw_data: &DrawData,
     ) -> RendererResult<()> {
+        if self.destroyed {
+            return Err(RendererError::Destroyed);
+        }
+
         if self.frames.is_none() {
             self.frames
                 .replace(Frames::new(vk_context, draw_data, self.in_flight_frames)?);
@@ -230,7 +313,24 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn destroy<C: RendererVkContext>(&mut self, context: &C) {
+    /// Destroy Vulkan resources held by the renderer.
+    ///
+    /// # Arguments
+    ///
+    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    ///
+    /// # Errors
+    ///
+    /// * [`RendererError`] - If the method is call after [`destroy`] was called.
+    ///
+    /// [`destroy`]: #method.destroy
+    /// [`RendererVkContext`]: trait.RendererVkContext.html
+    /// [`RendererError`]: enum.RendererError.html
+    pub fn destroy<C: RendererVkContext>(&mut self, context: &C) -> RendererResult<()> {
+        if self.destroyed {
+            return Err(RendererError::Destroyed);
+        }
+
         unsafe {
             let device = context.device();
             if let Some(mut frames) = self.frames.take() {
@@ -242,9 +342,12 @@ impl Renderer {
             self.fonts_texture.destroy(device);
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
+
+        Ok(())
     }
 }
 
+// Structure holding data for all frames in flight.
 struct Frames {
     index: usize,
     count: usize,
@@ -290,6 +393,7 @@ mod mesh {
     use imgui::{DrawData, DrawVert};
     use std::mem::size_of;
 
+    /// Vertex and index buffer resources for one frame in flight.
     pub struct Mesh {
         pub vertices: vk::Buffer,
         vertices_mem: vk::DeviceMemory,

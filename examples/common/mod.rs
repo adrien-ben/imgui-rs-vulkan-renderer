@@ -346,7 +346,7 @@ impl System {
 impl Drop for System {
     fn drop(&mut self) {
         unsafe {
-            self.renderer.destroy(&self.vulkan_context);
+            self.renderer.destroy(&self.vulkan_context).unwrap();
             self.vulkan_context.device.destroy_fence(self.fence, None);
             self.vulkan_context
                 .device
@@ -444,7 +444,7 @@ impl RendererVkContext for VulkanContext {
         &self.device
     }
 
-    fn graphics_queue(&self) -> vk::Queue {
+    fn queue(&self) -> vk::Queue {
         self.graphics_queue
     }
 
