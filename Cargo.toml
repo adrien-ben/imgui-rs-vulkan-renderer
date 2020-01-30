@@ -3,11 +3,17 @@ name = "imgui-rs-vulkan-renderer"
 description = "A Vulkan renderer for imgui-rs using Ash."
 readme = "README.md"
 keywords = ["imgui", "vulkan", "ash"]
+homepage = "https://github.com/adrien-ben/imgui-rs-vulkan-renderer"
 repository = "https://github.com/adrien-ben/imgui-rs-vulkan-renderer"
 license = "MIT"
 version = "0.1.0"
 authors = ["Adrien Bennadji <adrien.bennadji@live.fr>"]
 edition = "2018"
+
+exclude = [
+    "assets/*",
+    "compile_shaders.*"
+]
 
 [dependencies]
 log = "0.4"
