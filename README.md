@@ -95,4 +95,4 @@ cargo run --example <example>
 
 [imgui-rs]: https://github.com/Gekkio/imgui-rs
 [ash]: https://github.com/MaikKlein/ash
-[screenshot]: ./Capture.PNG
+[screenshot]: Capture.PNG
