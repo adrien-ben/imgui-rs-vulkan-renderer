@@ -7,7 +7,7 @@ homepage = "https://github.com/adrien-ben/imgui-rs-vulkan-renderer"
 repository = "https://github.com/adrien-ben/imgui-rs-vulkan-renderer"
 documentation = "https://docs.rs/imgui-rs-vulkan-renderer"
 license = "MIT"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Adrien Bennadji <adrien.bennadji@live.fr>"]
 edition = "2018"
 
@@ -18,16 +18,16 @@ exclude = [
 
 [dependencies]
 log = "0.4"
-imgui = "0.3"
-ash = "0.29"
+imgui = "^0.3"
+ash = ">=0.29"
 ultraviolet = "0.4"
 
 [dev-dependencies]
-simple_logger = "1.5.0"
+simple_logger = "1.6.0"
 winit = "0.19"
 raw-window-handle = "0.3"
 
 [dev-dependencies.imgui-winit-support]
-version = "0.3.0"
+version = "^0.3"
 default-features = false
 features = ["winit-19"]
