@@ -488,10 +488,10 @@ fn create_vulkan_instance(
     let engine_name = CString::new("No Engine")?;
     let app_info = vk::ApplicationInfo::builder()
         .application_name(app_name.as_c_str())
-        .application_version(ash::vk_make_version!(0, 1, 0))
+        .application_version(vk::make_version(0, 1, 0))
         .engine_name(engine_name.as_c_str())
-        .engine_version(ash::vk_make_version!(0, 1, 0))
-        .api_version(ash::vk_make_version!(1, 0, 0));
+        .engine_version(vk::make_version(0, 1, 0))
+        .api_version(vk::make_version(1, 0, 0));
 
     let mut extension_names = surface::required_extension_names();
     extension_names.push(DebugReport::name().as_ptr());
@@ -566,7 +566,9 @@ fn create_vulkan_physical_device_and_get_graphics_and_present_qs_indices(
                 }
 
                 let present_support = unsafe {
-                    surface.get_physical_device_surface_support(device, index, surface_khr)
+                    surface
+                        .get_physical_device_surface_support(device, index, surface_khr)
+                        .expect("Failed to get surface support")
                 };
                 if present_support && present.is_none() {
                     present = Some(index);
@@ -923,7 +925,6 @@ fn record_command_buffers<C: RendererVkContext>(
 }
 
 mod surface {
-
     use ash::extensions::khr::Surface;
     use ash::version::{EntryV1_0, InstanceV1_0};
     use ash::vk;
