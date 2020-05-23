@@ -26,7 +26,7 @@ ultraviolet = "0.4"
 simple_logger = "1.6.0"
 winit = "0.19"
 raw-window-handle = "0.3"
-ash = "0.30"
+ash = "0.31"
 
 [dev-dependencies.imgui-winit-support]
 version = "^0.3"
