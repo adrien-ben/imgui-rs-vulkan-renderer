@@ -182,6 +182,10 @@ impl Renderer {
             return Err(RendererError::Destroyed);
         }
 
+        if draw_data.total_vtx_count == 0 {
+            return Ok(());
+        }
+
         if self.frames.is_none() {
             self.frames
                 .replace(Frames::new(vk_context, draw_data, self.in_flight_frames)?);
