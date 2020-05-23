@@ -5,7 +5,7 @@ use ash::{
     version::{DeviceV1_0, InstanceV1_0},
     vk, Device, Instance,
 };
-use imgui::{Context, DrawCmd, DrawCmdParams, DrawData};
+use imgui::{Context, DrawCmd, DrawCmdParams, DrawData, TextureId, Textures};
 use mesh::*;
 use ultraviolet::projection::orthographic_vk;
 use vulkan::*;
@@ -63,6 +63,7 @@ pub struct Renderer {
     fonts_texture: Texture,
     descriptor_pool: vk::DescriptorPool,
     descriptor_set: vk::DescriptorSet,
+    textures: Textures<vk::DescriptorSet>,
     in_flight_frames: usize,
     frames: Option<Frames>,
     destroyed: bool,
@@ -108,7 +109,7 @@ impl Renderer {
             create_vulkan_pipeline_layout(vk_context.device(), descriptor_set_layout)?;
         let pipeline = create_vulkan_pipeline(vk_context.device(), pipeline_layout, render_pass)?;
 
-        // Font texture
+        // Fonts texture
         let fonts_texture = {
             let mut fonts = imgui.fonts();
             let atlas_texture = fonts.build_rgba32_texture();
@@ -136,12 +137,18 @@ impl Renderer {
             )??
         };
 
+        let mut fonts = imgui.fonts();
+        fonts.tex_id = TextureId::from(usize::MAX);
+
         // Descriptor set
         let (descriptor_pool, descriptor_set) = create_vulkan_descriptor_set(
             vk_context.device(),
             descriptor_set_layout,
             &fonts_texture,
         )?;
+
+        // Textures
+        let textures = Textures::new();
 
         Ok(Self {
             pipeline,
@@ -150,10 +157,25 @@ impl Renderer {
             fonts_texture,
             descriptor_pool,
             descriptor_set,
+            textures,
             in_flight_frames,
             frames: None,
             destroyed: false,
         })
+    }
+
+    pub fn textures(&mut self) -> &mut Textures<vk::DescriptorSet> {
+        &mut self.textures
+    }
+
+    fn lookup_descriptor_set(&self, texture_id: TextureId) -> RendererResult<vk::DescriptorSet> {
+        if texture_id.id() == usize::MAX {
+            Ok(self.descriptor_set)
+        } else if let Some(descriptor_set) = self.textures.get(texture_id) {
+            Ok(*descriptor_set)
+        } else {
+            Err(RendererError::BadTexture(texture_id))
+        }
     }
 
     /// Record commands required to render the gui.RendererError.
@@ -199,17 +221,6 @@ impl Renderer {
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
-            )
-        };
-
-        unsafe {
-            vk_context.device().cmd_bind_descriptor_sets(
-                command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout,
-                0,
-                &[self.descriptor_set],
-                &[],
             )
         };
 
@@ -259,6 +270,7 @@ impl Renderer {
 
         let mut index_offset = 0;
         let mut vertex_offset = 0;
+        let mut current_texture_id: Option<TextureId> = None;
         let clip_offset = draw_data.display_pos;
         let clip_scale = draw_data.framebuffer_scale;
         for draw_list in draw_data.draw_lists() {
@@ -269,9 +281,9 @@ impl Renderer {
                         cmd_params:
                             DrawCmdParams {
                                 clip_rect,
+                                texture_id,
                                 vtx_offset,
                                 idx_offset,
-                                ..
                             },
                     } => {
                         unsafe {
@@ -293,6 +305,21 @@ impl Renderer {
                             vk_context
                                 .device()
                                 .cmd_set_scissor(command_buffer, 0, &scissors);
+                        }
+
+                        if Some(texture_id) != current_texture_id {
+                            let descriptor_set = self.lookup_descriptor_set(texture_id)?;
+                            unsafe {
+                                vk_context.device().cmd_bind_descriptor_sets(
+                                    command_buffer,
+                                    vk::PipelineBindPoint::GRAPHICS,
+                                    self.pipeline_layout,
+                                    0,
+                                    &[descriptor_set],
+                                    &[],
+                                )
+                            };
+                            current_texture_id = Some(texture_id);
                         }
 
                         unsafe {

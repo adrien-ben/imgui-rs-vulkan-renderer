@@ -241,7 +241,7 @@ fn read_shader_from_source(source: &[u8]) -> RendererResult<Vec<u32>> {
 
 pub fn create_vulkan_descriptor_set(
     device: &Device,
-    sets_layout: vk::DescriptorSetLayout,
+    set_layout: vk::DescriptorSetLayout,
     texture: &texture::Texture,
 ) -> RendererResult<(vk::DescriptorPool, vk::DescriptorSet)> {
     log::debug!("Creating vulkan descriptor set");
@@ -257,10 +257,10 @@ pub fn create_vulkan_descriptor_set(
     };
 
     let set = {
-        let sets_layout = [sets_layout];
+        let set_layouts = [set_layout];
         let allocate_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(descriptor_pool)
-            .set_layouts(&sets_layout);
+            .set_layouts(&set_layouts);
 
         unsafe { device.allocate_descriptor_sets(&allocate_info)?[0] }
     };
