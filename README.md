@@ -84,6 +84,7 @@ export VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation
 cargo run --example <example>
 
 # Example can be one of the following value:
+# - collapsing_header
 # - color_button
 # - hello_world
 # - progress_bar
