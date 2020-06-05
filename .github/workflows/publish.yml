@@ -1,8 +1,9 @@
 name: Publish
 
 on:
-  create:
-    ref_type: tag
+  push:
+    tags: 
+      - '*'
 
 jobs:
   build:
