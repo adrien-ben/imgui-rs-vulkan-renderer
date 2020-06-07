@@ -23,7 +23,7 @@ const HEIGHT: u32 = 768;
 pub struct System {
     window: Window,
     events_loop: EventsLoop,
-    vulkan_context: VulkanContext,
+    pub vulkan_context: VulkanContext,
     command_buffer: vk::CommandBuffer,
     swapchain: Swapchain,
     swapchain_extent: vk::Extent2D,
@@ -38,7 +38,7 @@ pub struct System {
 
     imgui: Context,
     platform: WinitPlatform,
-    renderer: Renderer,
+    pub renderer: Renderer,
 }
 
 impl System {
@@ -362,7 +362,7 @@ impl Drop for System {
     }
 }
 
-struct VulkanContext {
+pub struct VulkanContext {
     _entry: Entry,
     instance: Instance,
     debug_report: DebugReport,
