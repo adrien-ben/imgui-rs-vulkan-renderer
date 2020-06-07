@@ -164,6 +164,26 @@ impl Renderer {
         })
     }
 
+    /// Returns the texture mapping used by the renderer to lookup textures.
+    ///
+    /// Textures are provided by the application as `vk::DescriptorSet`s.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let descriptor_set = ...;
+    /// // Insert a vk::DescriptorSet in the renderer textures map.
+    /// // The renderer returns a generated texture id.
+    /// let texture_id = renderer.textures().insert(descriptor_set);
+    /// ...
+    /// // Create an `Image` that references the texture by its id.
+    /// Image::new(texture_id, [100, 100]).build(&ui);
+    /// ```
+    ///
+    /// # Caveat
+    ///
+    /// Provided `vk::DescriptorSet`s must be created with a descriptor set layout that is compatible with the one used by the renderer.
+    /// See [Pipeline Layout Compatibility](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/html/vkspec.html#descriptorsets-compatibility).
     pub fn textures(&mut self) -> &mut Textures<vk::DescriptorSet> {
         &mut self.textures
     }
