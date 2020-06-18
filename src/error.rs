@@ -1,4 +1,5 @@
 use ash::vk;
+use imgui::TextureId;
 use std::{error::Error, fmt, io};
 
 /// Crates error type.
@@ -10,6 +11,8 @@ pub enum RendererError {
     Io(io::Error),
     /// Initialization errors.
     Init(String),
+    /// Texture lookup error.
+    BadTexture(TextureId),
     /// Post destruction renderer usage error.
     Destroyed,
 }
@@ -25,6 +28,7 @@ impl fmt::Display for RendererError {
                 "An error occured when initializing the renderer: {}",
                 message
             ),
+            BadTexture(texture_id) => write!(f, "Bad texture ID: {}", texture_id.id()),
             Destroyed => write!(f, "You are trying to use the renderer after destoying it"),
         }
     }
@@ -36,7 +40,7 @@ impl Error for RendererError {
         match self {
             Vulkan(error) => Some(error),
             Io(error) => Some(error),
-            Init(..) | Destroyed => None,
+            Init(..) | BadTexture(..) | Destroyed => None,
         }
     }
 }

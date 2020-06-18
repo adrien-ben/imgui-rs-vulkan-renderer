@@ -27,6 +27,7 @@ simple_logger = "1.6.0"
 winit = "0.19"
 raw-window-handle = "0.3"
 ash = "0.31"
+image = "0.23"
 
 [dev-dependencies.imgui-winit-support]
 version = "^0.4"
