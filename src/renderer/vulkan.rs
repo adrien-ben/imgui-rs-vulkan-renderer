@@ -1,9 +1,19 @@
+//! Vulkan helpers.
+//!
+//! A set of functions used to ease Vulkan resources creations. These are supposed to be internal but
+//! are exposed since they might help users create descriptors sets when using the custom textures.
+
 use crate::RendererResult;
 use ash::{version::DeviceV1_0, vk, Device};
-pub use buffer::*;
+pub(crate) use buffer::*;
 use std::{ffi::CString, mem};
 pub use texture::*;
 
+/// Record and execute commands.
+///
+/// The commands are recorded in a command buffer that exists just in the scope
+/// of that function. The buffer is then sumitted the a queue. We wait for the
+/// execution to be complete before returning.
 pub fn execute_one_time_commands<R, F: FnOnce(vk::CommandBuffer) -> R>(
     device: &Device,
     queue: vk::Queue,
@@ -57,6 +67,7 @@ pub unsafe fn any_as_u8_slice<T: Sized>(any: &T) -> &[u8] {
     std::slice::from_raw_parts(ptr, std::mem::size_of::<T>())
 }
 
+/// Create a descriptor set layout compatible with the graphics pipeline.
 pub fn create_vulkan_descriptor_set_layout(
     device: &Device,
 ) -> RendererResult<vk::DescriptorSetLayout> {
@@ -74,7 +85,7 @@ pub fn create_vulkan_descriptor_set_layout(
     unsafe { Ok(device.create_descriptor_set_layout(&descriptor_set_create_info, None)?) }
 }
 
-pub fn create_vulkan_pipeline_layout(
+pub(crate) fn create_vulkan_pipeline_layout(
     device: &Device,
     descriptor_set_layout: vk::DescriptorSetLayout,
 ) -> RendererResult<vk::PipelineLayout> {
@@ -95,7 +106,7 @@ pub fn create_vulkan_pipeline_layout(
     Ok(pipeline_layout)
 }
 
-pub fn create_vulkan_pipeline(
+pub(crate) fn create_vulkan_pipeline(
     device: &Device,
     pipeline_layout: vk::PipelineLayout,
     render_pass: vk::RenderPass,
@@ -239,22 +250,32 @@ fn read_shader_from_source(source: &[u8]) -> RendererResult<Vec<u32>> {
     Ok(ash::util::read_spv(&mut cursor)?)
 }
 
+/// Create a descriptor pool of sets compatible with the graphics pipeline.
+pub fn create_vulkan_descriptor_pool(
+    device: &Device,
+    max_sets: u32,
+) -> RendererResult<vk::DescriptorPool> {
+    log::debug!("Creating vulkan descriptor pool");
+
+    let sizes = [vk::DescriptorPoolSize {
+        ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+        descriptor_count: 1,
+    }];
+    let create_info = vk::DescriptorPoolCreateInfo::builder()
+        .pool_sizes(&sizes)
+        .max_sets(max_sets);
+    unsafe { Ok(device.create_descriptor_pool(&create_info, None)?) }
+}
+
+/// Create a descriptor set compatible with the graphics pipeline from a texture.
 pub fn create_vulkan_descriptor_set(
     device: &Device,
     set_layout: vk::DescriptorSetLayout,
-    texture: &texture::Texture,
-) -> RendererResult<(vk::DescriptorPool, vk::DescriptorSet)> {
+    descriptor_pool: vk::DescriptorPool,
+    image_view: vk::ImageView,
+    sampler: vk::Sampler,
+) -> RendererResult<vk::DescriptorSet> {
     log::debug!("Creating vulkan descriptor set");
-    let descriptor_pool = {
-        let sizes = [vk::DescriptorPoolSize {
-            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            descriptor_count: 1,
-        }];
-        let create_info = vk::DescriptorPoolCreateInfo::builder()
-            .pool_sizes(&sizes)
-            .max_sets(1);
-        unsafe { device.create_descriptor_pool(&create_info, None)? }
-    };
 
     let set = {
         let set_layouts = [set_layout];
@@ -267,8 +288,8 @@ pub fn create_vulkan_descriptor_set(
 
     unsafe {
         let image_info = [vk::DescriptorImageInfo {
-            sampler: texture.sampler,
-            image_view: texture.image_view,
+            sampler,
+            image_view,
             image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         }];
 
@@ -281,7 +302,7 @@ pub fn create_vulkan_descriptor_set(
         device.update_descriptor_sets(&writes, &[])
     }
 
-    Ok((descriptor_pool, set))
+    Ok(set)
 }
 
 mod buffer {
@@ -373,6 +394,7 @@ mod texture {
     use ash::vk;
     use ash::{version::DeviceV1_0, Device};
 
+    /// Helper struct representing a sampled texture.
     pub struct Texture {
         buffer: vk::Buffer,
         buffer_mem: vk::DeviceMemory,
@@ -383,13 +405,15 @@ mod texture {
     }
 
     impl Texture {
+        /// Create a texture from an `u8` array containing an rgba image.
+        ///
+        /// The image data is device local and it's format is R8G8B8A8_UNORM.
         pub fn cmd_from_rgba(
             device: &Device,
             command_buffer: vk::CommandBuffer,
             mem_properties: vk::PhysicalDeviceMemoryProperties,
             width: u32,
             height: u32,
-            format: vk::Format,
             data: &[u8],
         ) -> RendererResult<Self> {
             let (buffer, buffer_mem) = create_and_fill_buffer(
@@ -411,7 +435,7 @@ mod texture {
                     .extent(extent)
                     .mip_levels(1)
                     .array_layers(1)
-                    .format(format)
+                    .format(vk::Format::R8G8B8A8_UNORM)
                     .tiling(vk::ImageTiling::OPTIMAL)
                     .initial_layout(vk::ImageLayout::UNDEFINED)
                     .usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED)
@@ -520,7 +544,7 @@ mod texture {
                 let create_info = vk::ImageViewCreateInfo::builder()
                     .image(image)
                     .view_type(vk::ImageViewType::TYPE_2D)
-                    .format(format)
+                    .format(vk::Format::R8G8B8A8_UNORM)
                     .subresource_range(vk::ImageSubresourceRange {
                         aspect_mask: vk::ImageAspectFlags::COLOR,
                         base_mip_level: 0,
@@ -561,6 +585,8 @@ mod texture {
                 sampler,
             })
         }
+
+        /// Free texture's resources.
         pub fn destroy(&mut self, device: &Device) {
             unsafe {
                 device.destroy_sampler(self.sampler, None);

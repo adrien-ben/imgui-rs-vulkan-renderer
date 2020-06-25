@@ -1,13 +1,12 @@
 mod common;
-mod vulkan;
 
 use ash::{
     version::{DeviceV1_0, InstanceV1_0},
     vk,
 };
 use common::*;
-use vulkan::*;
 use imgui::*;
+use imgui_rs_vulkan_renderer::vulkan::*;
 use imgui_rs_vulkan_renderer::RendererVkContext;
 
 use std::error::Error;
@@ -15,7 +14,7 @@ use std::io::Cursor;
 
 use image::{jpeg::JpegDecoder, ImageDecoder};
 
-const APP_NAME: &str = "color textures";
+const APP_NAME: &str = "custom textures";
 
 struct CustomTexturesApp {
     descriptor_set_layout: vk::DescriptorSetLayout,
@@ -73,7 +72,6 @@ impl CustomTexturesApp {
                         memory_properties,
                         WIDTH as u32,
                         HEIGHT as u32,
-                        vk::Format::R8G8B8A8_UNORM,
                         &data,
                     )
                 },
@@ -85,9 +83,17 @@ impl CustomTexturesApp {
         let descriptor_set_layout =
             create_vulkan_descriptor_set_layout(vk_context.device()).unwrap();
 
-        let (descriptor_pool, descriptor_set) =
-            create_vulkan_descriptor_set(&vk_context.device(), descriptor_set_layout, &my_texture)
-                .unwrap();
+        let descriptor_pool = create_vulkan_descriptor_pool(vk_context.device(), 1).unwrap();
+
+        let descriptor_set = create_vulkan_descriptor_set(
+            &vk_context.device(),
+            descriptor_set_layout,
+            descriptor_pool,
+            my_texture.image_view,
+            my_texture.sampler,
+        )
+        .unwrap();
+
         let texture_id = textures.insert(descriptor_set);
 
         let my_texture_id = Some(texture_id);
@@ -166,7 +172,6 @@ impl Lenna {
                     memory_properties,
                     width,
                     height,
-                    vk::Format::R8G8B8A8_UNORM,
                     &image,
                 )
             },
@@ -177,9 +182,16 @@ impl Lenna {
         let descriptor_set_layout =
             create_vulkan_descriptor_set_layout(vk_context.device()).unwrap();
 
-        let (descriptor_pool, descriptor_set) =
-            create_vulkan_descriptor_set(&vk_context.device(), descriptor_set_layout, &texture)
-                .unwrap();
+        let descriptor_pool = create_vulkan_descriptor_pool(vk_context.device(), 1).unwrap();
+
+        let descriptor_set = create_vulkan_descriptor_set(
+            vk_context.device(),
+            descriptor_set_layout,
+            descriptor_pool,
+            texture.image_view,
+            texture.sampler,
+        )
+        .unwrap();
 
         let texture_id = textures.insert(descriptor_set);
         Ok(Lenna {
