@@ -61,22 +61,15 @@ impl CustomTexturesApp {
                     .get_physical_device_memory_properties(vk_context.physical_device())
             };
 
-            execute_one_time_commands(
+            Texture::from_rgba8(
                 vk_context.device(),
                 vk_context.queue(),
                 vk_context.command_pool(),
-                |buffer| {
-                    Texture::cmd_from_rgba(
-                        vk_context.device(),
-                        buffer,
-                        memory_properties,
-                        WIDTH as u32,
-                        HEIGHT as u32,
-                        &data,
-                    )
-                },
+                memory_properties,
+                WIDTH as u32,
+                HEIGHT as u32,
+                &data,
             )
-            .unwrap()
             .unwrap()
         };
 
@@ -161,22 +154,15 @@ impl Lenna {
                 .get_physical_device_memory_properties(vk_context.physical_device())
         };
 
-        let texture = execute_one_time_commands(
+        let texture = Texture::from_rgba8(
             vk_context.device(),
             vk_context.queue(),
             vk_context.command_pool(),
-            |buffer| {
-                Texture::cmd_from_rgba(
-                    vk_context.device(),
-                    buffer,
-                    memory_properties,
-                    width,
-                    height,
-                    &image,
-                )
-            },
+            memory_properties,
+            width,
+            height,
+            &image,
         )
-        .unwrap()
         .unwrap();
 
         let descriptor_set_layout =

@@ -119,21 +119,15 @@ impl Renderer {
                     .get_physical_device_memory_properties(vk_context.physical_device())
             };
 
-            execute_one_time_commands(
+            Texture::from_rgba8(
                 vk_context.device(),
                 vk_context.queue(),
                 vk_context.command_pool(),
-                |buffer| {
-                    Texture::cmd_from_rgba(
-                        vk_context.device(),
-                        buffer,
-                        memory_properties,
-                        atlas_texture.width,
-                        atlas_texture.height,
-                        &atlas_texture.data,
-                    )
-                },
-            )??
+                memory_properties,
+                atlas_texture.width,
+                atlas_texture.height,
+                &atlas_texture.data,
+            )?
         };
 
         let mut fonts = imgui.fonts();

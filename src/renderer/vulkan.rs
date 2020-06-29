@@ -9,60 +9,8 @@ pub(crate) use buffer::*;
 use std::{ffi::CString, mem};
 pub use texture::*;
 
-/// Record and execute commands.
-///
-/// The commands are recorded in a command buffer that exists just in the scope
-/// of that function. The buffer is then sumitted the a queue. We wait for the
-/// execution to be complete before returning.
-pub fn execute_one_time_commands<R, F: FnOnce(vk::CommandBuffer) -> R>(
-    device: &Device,
-    queue: vk::Queue,
-    pool: vk::CommandPool,
-    executor: F,
-) -> RendererResult<R> {
-    let command_buffer = {
-        let alloc_info = vk::CommandBufferAllocateInfo::builder()
-            .level(vk::CommandBufferLevel::PRIMARY)
-            .command_pool(pool)
-            .command_buffer_count(1);
-
-        unsafe { device.allocate_command_buffers(&alloc_info)?[0] }
-    };
-    let command_buffers = [command_buffer];
-
-    // Begin recording
-    {
-        let begin_info = vk::CommandBufferBeginInfo::builder()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-        unsafe { device.begin_command_buffer(command_buffer, &begin_info)? };
-    }
-
-    // Execute user function
-    let executor_result = executor(command_buffer);
-
-    // End recording
-    unsafe { device.end_command_buffer(command_buffer)? };
-
-    // Submit and wait
-    {
-        let submit_info = vk::SubmitInfo::builder()
-            .command_buffers(&command_buffers)
-            .build();
-        let submit_infos = [submit_info];
-        unsafe {
-            device.queue_submit(queue, &submit_infos, vk::Fence::null())?;
-            device.queue_wait_idle(queue)?;
-        };
-    }
-
-    // Free
-    unsafe { device.free_command_buffers(pool, &command_buffers) };
-
-    Ok(executor_result)
-}
-
 /// Return a `&[u8]` for any sized object passed in.
-pub unsafe fn any_as_u8_slice<T: Sized>(any: &T) -> &[u8] {
+pub(crate) unsafe fn any_as_u8_slice<T: Sized>(any: &T) -> &[u8] {
     let ptr = (any as *const T) as *const u8;
     std::slice::from_raw_parts(ptr, std::mem::size_of::<T>())
 }
@@ -396,8 +344,6 @@ mod texture {
 
     /// Helper struct representing a sampled texture.
     pub struct Texture {
-        buffer: vk::Buffer,
-        buffer_mem: vk::DeviceMemory,
         pub image: vk::Image,
         image_mem: vk::DeviceMemory,
         pub image_view: vk::ImageView,
@@ -408,14 +354,46 @@ mod texture {
         /// Create a texture from an `u8` array containing an rgba image.
         ///
         /// The image data is device local and it's format is R8G8B8A8_UNORM.
-        pub fn cmd_from_rgba(
+        ///     
+        /// # Arguments
+        ///
+        /// * `device` - The Vulkan logical device.
+        /// * `transfer_queue` - The queue with transfer capabilities to execute commands.
+        /// * `command_pool` - The command pool used to create a command buffer used to record commands.
+        /// * `mem_properties` - The memory properties of the Vulkan physical device.
+        /// * `width` - The width of the image.
+        /// * `height` - The height of the image.
+        /// * `data` - The image data.
+        pub fn from_rgba8(
+            device: &Device,
+            transfer_queue: vk::Queue,
+            command_pool: vk::CommandPool,
+            mem_properties: vk::PhysicalDeviceMemoryProperties,
+            width: u32,
+            height: u32,
+            data: &[u8],
+        ) -> RendererResult<Self> {
+            let (texture, staging_buff, staging_mem) =
+                execute_one_time_commands(device, transfer_queue, command_pool, |buffer| {
+                    Self::cmd_from_rgba(device, buffer, mem_properties, width, height, data)
+                })??;
+
+            unsafe {
+                device.destroy_buffer(staging_buff, None);
+                device.free_memory(staging_mem, None);
+            }
+
+            Ok(texture)
+        }
+
+        fn cmd_from_rgba(
             device: &Device,
             command_buffer: vk::CommandBuffer,
             mem_properties: vk::PhysicalDeviceMemoryProperties,
             width: u32,
             height: u32,
             data: &[u8],
-        ) -> RendererResult<Self> {
+        ) -> RendererResult<(Self, vk::Buffer, vk::DeviceMemory)> {
             let (buffer, buffer_mem) = create_and_fill_buffer(
                 data,
                 device,
@@ -576,14 +554,14 @@ mod texture {
                 unsafe { device.create_sampler(&sampler_info, None)? }
             };
 
-            Ok(Self {
-                buffer,
-                buffer_mem,
+            let texture = Self {
                 image,
                 image_mem,
                 image_view,
                 sampler,
-            })
+            };
+
+            Ok((texture, buffer, buffer_mem))
         }
 
         /// Free texture's resources.
@@ -593,9 +571,54 @@ mod texture {
                 device.destroy_image_view(self.image_view, None);
                 device.destroy_image(self.image, None);
                 device.free_memory(self.image_mem, None);
-                device.destroy_buffer(self.buffer, None);
-                device.free_memory(self.buffer_mem, None);
             }
         }
+    }
+
+    fn execute_one_time_commands<R, F: FnOnce(vk::CommandBuffer) -> R>(
+        device: &Device,
+        queue: vk::Queue,
+        pool: vk::CommandPool,
+        executor: F,
+    ) -> RendererResult<R> {
+        let command_buffer = {
+            let alloc_info = vk::CommandBufferAllocateInfo::builder()
+                .level(vk::CommandBufferLevel::PRIMARY)
+                .command_pool(pool)
+                .command_buffer_count(1);
+
+            unsafe { device.allocate_command_buffers(&alloc_info)?[0] }
+        };
+        let command_buffers = [command_buffer];
+
+        // Begin recording
+        {
+            let begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            unsafe { device.begin_command_buffer(command_buffer, &begin_info)? };
+        }
+
+        // Execute user function
+        let executor_result = executor(command_buffer);
+
+        // End recording
+        unsafe { device.end_command_buffer(command_buffer)? };
+
+        // Submit and wait
+        {
+            let submit_info = vk::SubmitInfo::builder()
+                .command_buffers(&command_buffers)
+                .build();
+            let submit_infos = [submit_info];
+            unsafe {
+                device.queue_submit(queue, &submit_infos, vk::Fence::null())?;
+                device.queue_wait_idle(queue)?;
+            };
+        }
+
+        // Free
+        unsafe { device.free_command_buffers(pool, &command_buffers) };
+
+        Ok(executor_result)
     }
 }
