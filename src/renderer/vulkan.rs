@@ -1,62 +1,21 @@
+//! Vulkan helpers.
+//!
+//! A set of functions used to ease Vulkan resources creations. These are supposed to be internal but
+//! are exposed since they might help users create descriptors sets when using the custom textures.
+
 use crate::RendererResult;
 use ash::{version::DeviceV1_0, vk, Device};
-pub use buffer::*;
+pub(crate) use buffer::*;
 use std::{ffi::CString, mem};
 pub use texture::*;
 
-pub fn execute_one_time_commands<R, F: FnOnce(vk::CommandBuffer) -> R>(
-    device: &Device,
-    queue: vk::Queue,
-    pool: vk::CommandPool,
-    executor: F,
-) -> RendererResult<R> {
-    let command_buffer = {
-        let alloc_info = vk::CommandBufferAllocateInfo::builder()
-            .level(vk::CommandBufferLevel::PRIMARY)
-            .command_pool(pool)
-            .command_buffer_count(1);
-
-        unsafe { device.allocate_command_buffers(&alloc_info)?[0] }
-    };
-    let command_buffers = [command_buffer];
-
-    // Begin recording
-    {
-        let begin_info = vk::CommandBufferBeginInfo::builder()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-        unsafe { device.begin_command_buffer(command_buffer, &begin_info)? };
-    }
-
-    // Execute user function
-    let executor_result = executor(command_buffer);
-
-    // End recording
-    unsafe { device.end_command_buffer(command_buffer)? };
-
-    // Submit and wait
-    {
-        let submit_info = vk::SubmitInfo::builder()
-            .command_buffers(&command_buffers)
-            .build();
-        let submit_infos = [submit_info];
-        unsafe {
-            device.queue_submit(queue, &submit_infos, vk::Fence::null())?;
-            device.queue_wait_idle(queue)?;
-        };
-    }
-
-    // Free
-    unsafe { device.free_command_buffers(pool, &command_buffers) };
-
-    Ok(executor_result)
-}
-
 /// Return a `&[u8]` for any sized object passed in.
-pub unsafe fn any_as_u8_slice<T: Sized>(any: &T) -> &[u8] {
+pub(crate) unsafe fn any_as_u8_slice<T: Sized>(any: &T) -> &[u8] {
     let ptr = (any as *const T) as *const u8;
     std::slice::from_raw_parts(ptr, std::mem::size_of::<T>())
 }
 
+/// Create a descriptor set layout compatible with the graphics pipeline.
 pub fn create_vulkan_descriptor_set_layout(
     device: &Device,
 ) -> RendererResult<vk::DescriptorSetLayout> {
@@ -74,7 +33,7 @@ pub fn create_vulkan_descriptor_set_layout(
     unsafe { Ok(device.create_descriptor_set_layout(&descriptor_set_create_info, None)?) }
 }
 
-pub fn create_vulkan_pipeline_layout(
+pub(crate) fn create_vulkan_pipeline_layout(
     device: &Device,
     descriptor_set_layout: vk::DescriptorSetLayout,
 ) -> RendererResult<vk::PipelineLayout> {
@@ -95,7 +54,7 @@ pub fn create_vulkan_pipeline_layout(
     Ok(pipeline_layout)
 }
 
-pub fn create_vulkan_pipeline(
+pub(crate) fn create_vulkan_pipeline(
     device: &Device,
     pipeline_layout: vk::PipelineLayout,
     render_pass: vk::RenderPass,
@@ -239,22 +198,32 @@ fn read_shader_from_source(source: &[u8]) -> RendererResult<Vec<u32>> {
     Ok(ash::util::read_spv(&mut cursor)?)
 }
 
+/// Create a descriptor pool of sets compatible with the graphics pipeline.
+pub fn create_vulkan_descriptor_pool(
+    device: &Device,
+    max_sets: u32,
+) -> RendererResult<vk::DescriptorPool> {
+    log::debug!("Creating vulkan descriptor pool");
+
+    let sizes = [vk::DescriptorPoolSize {
+        ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+        descriptor_count: 1,
+    }];
+    let create_info = vk::DescriptorPoolCreateInfo::builder()
+        .pool_sizes(&sizes)
+        .max_sets(max_sets);
+    unsafe { Ok(device.create_descriptor_pool(&create_info, None)?) }
+}
+
+/// Create a descriptor set compatible with the graphics pipeline from a texture.
 pub fn create_vulkan_descriptor_set(
     device: &Device,
     set_layout: vk::DescriptorSetLayout,
-    texture: &texture::Texture,
-) -> RendererResult<(vk::DescriptorPool, vk::DescriptorSet)> {
+    descriptor_pool: vk::DescriptorPool,
+    image_view: vk::ImageView,
+    sampler: vk::Sampler,
+) -> RendererResult<vk::DescriptorSet> {
     log::debug!("Creating vulkan descriptor set");
-    let descriptor_pool = {
-        let sizes = [vk::DescriptorPoolSize {
-            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            descriptor_count: 1,
-        }];
-        let create_info = vk::DescriptorPoolCreateInfo::builder()
-            .pool_sizes(&sizes)
-            .max_sets(1);
-        unsafe { device.create_descriptor_pool(&create_info, None)? }
-    };
 
     let set = {
         let set_layouts = [set_layout];
@@ -267,8 +236,8 @@ pub fn create_vulkan_descriptor_set(
 
     unsafe {
         let image_info = [vk::DescriptorImageInfo {
-            sampler: texture.sampler,
-            image_view: texture.image_view,
+            sampler,
+            image_view,
             image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         }];
 
@@ -281,7 +250,7 @@ pub fn create_vulkan_descriptor_set(
         device.update_descriptor_sets(&writes, &[])
     }
 
-    Ok((descriptor_pool, set))
+    Ok(set)
 }
 
 mod buffer {
@@ -373,9 +342,8 @@ mod texture {
     use ash::vk;
     use ash::{version::DeviceV1_0, Device};
 
+    /// Helper struct representing a sampled texture.
     pub struct Texture {
-        buffer: vk::Buffer,
-        buffer_mem: vk::DeviceMemory,
         pub image: vk::Image,
         image_mem: vk::DeviceMemory,
         pub image_view: vk::ImageView,
@@ -383,15 +351,49 @@ mod texture {
     }
 
     impl Texture {
-        pub fn cmd_from_rgba(
+        /// Create a texture from an `u8` array containing an rgba image.
+        ///
+        /// The image data is device local and it's format is R8G8B8A8_UNORM.
+        ///     
+        /// # Arguments
+        ///
+        /// * `device` - The Vulkan logical device.
+        /// * `transfer_queue` - The queue with transfer capabilities to execute commands.
+        /// * `command_pool` - The command pool used to create a command buffer used to record commands.
+        /// * `mem_properties` - The memory properties of the Vulkan physical device.
+        /// * `width` - The width of the image.
+        /// * `height` - The height of the image.
+        /// * `data` - The image data.
+        pub fn from_rgba8(
+            device: &Device,
+            transfer_queue: vk::Queue,
+            command_pool: vk::CommandPool,
+            mem_properties: vk::PhysicalDeviceMemoryProperties,
+            width: u32,
+            height: u32,
+            data: &[u8],
+        ) -> RendererResult<Self> {
+            let (texture, staging_buff, staging_mem) =
+                execute_one_time_commands(device, transfer_queue, command_pool, |buffer| {
+                    Self::cmd_from_rgba(device, buffer, mem_properties, width, height, data)
+                })??;
+
+            unsafe {
+                device.destroy_buffer(staging_buff, None);
+                device.free_memory(staging_mem, None);
+            }
+
+            Ok(texture)
+        }
+
+        fn cmd_from_rgba(
             device: &Device,
             command_buffer: vk::CommandBuffer,
             mem_properties: vk::PhysicalDeviceMemoryProperties,
             width: u32,
             height: u32,
-            format: vk::Format,
             data: &[u8],
-        ) -> RendererResult<Self> {
+        ) -> RendererResult<(Self, vk::Buffer, vk::DeviceMemory)> {
             let (buffer, buffer_mem) = create_and_fill_buffer(
                 data,
                 device,
@@ -411,7 +413,7 @@ mod texture {
                     .extent(extent)
                     .mip_levels(1)
                     .array_layers(1)
-                    .format(format)
+                    .format(vk::Format::R8G8B8A8_UNORM)
                     .tiling(vk::ImageTiling::OPTIMAL)
                     .initial_layout(vk::ImageLayout::UNDEFINED)
                     .usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED)
@@ -520,7 +522,7 @@ mod texture {
                 let create_info = vk::ImageViewCreateInfo::builder()
                     .image(image)
                     .view_type(vk::ImageViewType::TYPE_2D)
-                    .format(format)
+                    .format(vk::Format::R8G8B8A8_UNORM)
                     .subresource_range(vk::ImageSubresourceRange {
                         aspect_mask: vk::ImageAspectFlags::COLOR,
                         base_mip_level: 0,
@@ -552,24 +554,71 @@ mod texture {
                 unsafe { device.create_sampler(&sampler_info, None)? }
             };
 
-            Ok(Self {
-                buffer,
-                buffer_mem,
+            let texture = Self {
                 image,
                 image_mem,
                 image_view,
                 sampler,
-            })
+            };
+
+            Ok((texture, buffer, buffer_mem))
         }
+
+        /// Free texture's resources.
         pub fn destroy(&mut self, device: &Device) {
             unsafe {
                 device.destroy_sampler(self.sampler, None);
                 device.destroy_image_view(self.image_view, None);
                 device.destroy_image(self.image, None);
                 device.free_memory(self.image_mem, None);
-                device.destroy_buffer(self.buffer, None);
-                device.free_memory(self.buffer_mem, None);
             }
         }
+    }
+
+    fn execute_one_time_commands<R, F: FnOnce(vk::CommandBuffer) -> R>(
+        device: &Device,
+        queue: vk::Queue,
+        pool: vk::CommandPool,
+        executor: F,
+    ) -> RendererResult<R> {
+        let command_buffer = {
+            let alloc_info = vk::CommandBufferAllocateInfo::builder()
+                .level(vk::CommandBufferLevel::PRIMARY)
+                .command_pool(pool)
+                .command_buffer_count(1);
+
+            unsafe { device.allocate_command_buffers(&alloc_info)?[0] }
+        };
+        let command_buffers = [command_buffer];
+
+        // Begin recording
+        {
+            let begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            unsafe { device.begin_command_buffer(command_buffer, &begin_info)? };
+        }
+
+        // Execute user function
+        let executor_result = executor(command_buffer);
+
+        // End recording
+        unsafe { device.end_command_buffer(command_buffer)? };
+
+        // Submit and wait
+        {
+            let submit_info = vk::SubmitInfo::builder()
+                .command_buffers(&command_buffers)
+                .build();
+            let submit_infos = [submit_info];
+            unsafe {
+                device.queue_submit(queue, &submit_infos, vk::Fence::null())?;
+                device.queue_wait_idle(queue)?;
+            };
+        }
+
+        // Free
+        unsafe { device.free_command_buffers(pool, &command_buffers) };
+
+        Ok(executor_result)
     }
 }

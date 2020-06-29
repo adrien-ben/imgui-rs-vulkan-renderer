@@ -1,4 +1,4 @@
-mod vulkan;
+pub mod vulkan;
 
 use crate::RendererError;
 use ash::{
@@ -119,32 +119,30 @@ impl Renderer {
                     .get_physical_device_memory_properties(vk_context.physical_device())
             };
 
-            execute_one_time_commands(
+            Texture::from_rgba8(
                 vk_context.device(),
                 vk_context.queue(),
                 vk_context.command_pool(),
-                |buffer| {
-                    Texture::cmd_from_rgba(
-                        vk_context.device(),
-                        buffer,
-                        memory_properties,
-                        atlas_texture.width,
-                        atlas_texture.height,
-                        vk::Format::R8G8B8A8_UNORM,
-                        &atlas_texture.data,
-                    )
-                },
-            )??
+                memory_properties,
+                atlas_texture.width,
+                atlas_texture.height,
+                &atlas_texture.data,
+            )?
         };
 
         let mut fonts = imgui.fonts();
         fonts.tex_id = TextureId::from(usize::MAX);
 
+        // Descriptor pool
+        let descriptor_pool = create_vulkan_descriptor_pool(vk_context.device(), 1)?;
+
         // Descriptor set
-        let (descriptor_pool, descriptor_set) = create_vulkan_descriptor_set(
+        let descriptor_set = create_vulkan_descriptor_set(
             vk_context.device(),
             descriptor_set_layout,
-            &fonts_texture,
+            descriptor_pool,
+            fonts_texture.image_view,
+            fonts_texture.sampler,
         )?;
 
         // Textures

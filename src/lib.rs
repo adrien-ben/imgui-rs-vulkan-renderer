@@ -23,7 +23,7 @@
 //!
 //! - Custom textures
 //!
-//! Custom textures are not supported for the moment.
+//! The renderer supports custom textures. See `Renderer::textures` for details.
 //!
 //! - Custom Vulkan allocators
 //!
@@ -55,6 +55,7 @@
 //!
 //! # Example can be one of the following value:
 //! # - color_button
+//! # - custom_textures
 //! # - hello_world
 //! # - progress_bar
 //! # - radio_button
