@@ -10,9 +10,8 @@ use imgui_rs_vulkan_renderer::vulkan::*;
 use imgui_rs_vulkan_renderer::RendererVkContext;
 
 use std::error::Error;
-use std::io::Cursor;
 
-use image::{jpeg::JpegDecoder, ImageDecoder};
+use image::{self, GenericImageView};
 
 const APP_NAME: &str = "custom textures";
 
@@ -140,13 +139,10 @@ impl Lenna {
         textures: &mut Textures<vk::DescriptorSet>,
     ) -> Result<Self, Box<dyn Error>> {
         let lenna_bytes = include_bytes!("../resources/Lenna.jpg");
-        let byte_stream = Cursor::new(lenna_bytes.as_ref());
-        let decoder = JpegDecoder::new(byte_stream)?;
-
-        let (width, height) = decoder.dimensions();
-        let mut image = vec![0; decoder.total_bytes() as usize];
-        decoder.read_image(&mut image)?;
-        let image = Self::rgb_to_rgba(&image);
+        let image =
+            image::load_from_memory_with_format(lenna_bytes, image::ImageFormat::Jpeg).unwrap();
+        let (width, height) = image.dimensions();
+        let data = image.into_rgba();
 
         let memory_properties = unsafe {
             vk_context
@@ -161,7 +157,7 @@ impl Lenna {
             memory_properties,
             width,
             height,
-            &image,
+            &data,
         )
         .unwrap();
 
@@ -188,27 +184,6 @@ impl Lenna {
             texture_id,
             size: [width as f32, height as f32],
         })
-    }
-
-    fn rgb_to_rgba(input: &[u8]) -> Vec<u8> {
-        let count = input.len() / 3;
-        let mut output = vec![0; 4 * count];
-
-        let in_pixels = input[..3 * count].chunks_exact(3);
-        let out_pixels = output[..4 * count].chunks_exact_mut(4);
-
-        for (pixel, outp) in in_pixels.zip(out_pixels) {
-            let r = pixel[0];
-            let g = pixel[1];
-            let b = pixel[2];
-
-            outp[0] = r;
-            outp[1] = g;
-            outp[2] = b;
-            outp[3] = 255;
-        }
-
-        output
     }
 
     fn show(&self, ui: &Ui) {
