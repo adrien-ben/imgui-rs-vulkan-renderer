@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut state = State {
         render_closable: true,
     };
-    System::new(APP_NAME)?.run(|run, ui| {
+    System::new(APP_NAME)?.run((), move |run, ui, _| {
         let w = Window::new(im_str!("Collapsing header"))
             .opened(run)
             .position([20.0, 20.0], Condition::Appearing)

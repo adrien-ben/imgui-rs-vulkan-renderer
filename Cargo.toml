@@ -23,13 +23,9 @@ ash = ">=0.29"
 ultraviolet = "0.4"
 
 [dev-dependencies]
-simple_logger = "1.6.0"
-winit = "0.19"
+simple_logger = "1.6"
+winit = "0.22"
+imgui-winit-support = "^0.4"
 raw-window-handle = "0.3"
 ash = "0.31"
 image = "0.23"
-
-[dev-dependencies.imgui-winit-support]
-version = "^0.4"
-default-features = false
-features = ["winit-19"]

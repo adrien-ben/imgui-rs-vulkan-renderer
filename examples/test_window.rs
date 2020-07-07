@@ -7,7 +7,7 @@ const APP_NAME: &str = "test window";
 
 fn main() -> Result<(), Box<dyn Error>> {
     simple_logger::init()?;
-    System::new(APP_NAME)?.run(|run, ui| ui.show_demo_window(run))?;
+    System::new(APP_NAME)?.run((), |run, ui, _| ui.show_demo_window(run))?;
 
     Ok(())
 }

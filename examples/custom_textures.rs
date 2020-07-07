@@ -119,18 +119,6 @@ impl CustomTexturesApp {
                 }
             });
     }
-
-    pub fn destroy<C: RendererVkContext>(&mut self, context: &C) {
-        unsafe {
-            let device = context.device();
-            device.destroy_descriptor_pool(self.descriptor_pool, None);
-            self.my_texture.destroy(device);
-            if let Some(lenna) = &mut self.lenna {
-                lenna.destroy(context);
-            }
-            device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
-        }
-    }
 }
 
 impl Lenna {
@@ -138,7 +126,7 @@ impl Lenna {
         vk_context: &C,
         textures: &mut Textures<vk::DescriptorSet>,
     ) -> Result<Self, Box<dyn Error>> {
-        let lenna_bytes = include_bytes!("../resources/Lenna.jpg");
+        let lenna_bytes = include_bytes!("../assets/images/Lenna.jpg");
         let image =
             image::load_from_memory_with_format(lenna_bytes, image::ImageFormat::Jpeg).unwrap();
         let (width, height) = image.dimensions();
@@ -200,14 +188,27 @@ impl Lenna {
     }
 }
 
+impl App for CustomTexturesApp {
+    fn destroy(&mut self, context: &VulkanContext) {
+        unsafe {
+            let device = context.device();
+            device.destroy_descriptor_pool(self.descriptor_pool, None);
+            self.my_texture.destroy(device);
+            if let Some(lenna) = &mut self.lenna {
+                lenna.destroy(context);
+            }
+            device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     simple_logger::init()?;
     let mut system = System::new(APP_NAME)?;
-    let mut my_app = CustomTexturesApp::new(&system.vulkan_context, system.renderer.textures());
-    system.run(|_, ui| {
-        my_app.show_textures(ui);
+    let my_app = CustomTexturesApp::new(&system.vulkan_context, system.renderer.textures());
+    system.run(my_app, move |_, ui, app| {
+        app.show_textures(ui);
     })?;
-    my_app.destroy(&system.vulkan_context);
 
     Ok(())
 }
