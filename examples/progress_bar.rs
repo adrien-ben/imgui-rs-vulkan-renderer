@@ -8,7 +8,7 @@ const APP_NAME: &str = "progress bar";
 
 fn main() -> Result<(), Box<dyn Error>> {
     simple_logger::init()?;
-    System::new(APP_NAME)?.run(|run, ui| {
+    System::new(APP_NAME)?.run((), |run, ui, _| {
         let w = Window::new(im_str!("Progress bar"))
             .opened(run)
             .position([20.0, 20.0], Condition::Appearing)

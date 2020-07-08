@@ -1,7 +1,7 @@
 use ash::{
     extensions::{
         ext::DebugReport,
-        khr::{Surface, Swapchain},
+        khr::{Surface, Swapchain as SwapchainLoader},
     },
     version::{DeviceV1_0, EntryV1_0, InstanceV1_0},
     vk, Device, Entry, Instance,
@@ -12,26 +12,35 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::{
     error::Error,
     ffi::{CStr, CString},
+    marker::PhantomData,
     os::raw::{c_char, c_void},
     time::Instant,
 };
-use winit::{dpi::LogicalSize, Event, EventsLoop, Window, WindowBuilder, WindowEvent};
+use winit::{
+    dpi::PhysicalSize,
+    event::{Event, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
+    window::{Window, WindowBuilder},
+};
 
 const WIDTH: u32 = 1024;
 const HEIGHT: u32 = 768;
 
-pub struct System {
+pub trait App {
+    fn destroy(&mut self, context: &VulkanContext);
+}
+
+impl App for () {
+    fn destroy(&mut self, _: &VulkanContext) {}
+}
+
+pub struct System<A: App + 'static> {
+    phantom_data: PhantomData<A>,
     window: Window,
-    events_loop: EventsLoop,
+    event_loop: EventLoop<()>,
     pub vulkan_context: VulkanContext,
     command_buffer: vk::CommandBuffer,
     swapchain: Swapchain,
-    swapchain_extent: vk::Extent2D,
-    swapchain_khr: vk::SwapchainKHR,
-    swapchain_images: Vec<vk::Image>,
-    swapchain_image_views: Vec<vk::ImageView>,
-    render_pass: vk::RenderPass,
-    framebuffers: Vec<vk::Framebuffer>,
     image_available_semaphore: vk::Semaphore,
     render_finished_semaphore: vk::Semaphore,
     fence: vk::Fence,
@@ -41,11 +50,11 @@ pub struct System {
     pub renderer: Renderer,
 }
 
-impl System {
+impl<A: App> System<A> {
     pub fn new(title: &str) -> Result<Self, Box<dyn Error>> {
         log::info!("Create application");
         // Setup window
-        let (window, events_loop) = create_window(title)?;
+        let (window, event_loop) = create_window(title)?;
 
         let vulkan_context = VulkanContext::new(&window, title)?;
 
@@ -62,26 +71,7 @@ impl System {
             }
         };
 
-        // Swapchain
-        let (
-            swapchain,
-            swapchain_khr,
-            swapchain_extent,
-            swapchain_format,
-            swapchain_images,
-            swapchain_image_views,
-        ) = create_vulkan_swapchain(&vulkan_context)?;
-
-        // Renderpass
-        let render_pass = create_vulkan_render_pass(&vulkan_context.device, swapchain_format)?;
-
-        // Framebuffers
-        let framebuffers = create_vulkan_framebuffers(
-            &vulkan_context.device,
-            render_pass,
-            swapchain_extent,
-            &swapchain_image_views,
-        )?;
+        let swapchain = Swapchain::new(&vulkan_context)?;
 
         // Semaphore use for presentation
         let image_available_semaphore = {
@@ -132,20 +122,15 @@ impl System {
         imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
         platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Rounded);
 
-        let renderer = Renderer::new(&vulkan_context, 1, render_pass, &mut imgui)?;
+        let renderer = Renderer::new(&vulkan_context, 1, swapchain.render_pass, &mut imgui)?;
 
         Ok(Self {
+            phantom_data: PhantomData,
             window,
-            events_loop,
+            event_loop,
             vulkan_context,
             command_buffer,
             swapchain,
-            swapchain_extent,
-            swapchain_khr,
-            swapchain_images,
-            swapchain_image_views,
-            render_pass,
-            framebuffers,
             image_available_semaphore,
             render_finished_semaphore,
             fence,
@@ -155,210 +140,203 @@ impl System {
         })
     }
 
-    fn recreate_swapchain(&mut self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Recreating the swapchain");
-        // Wait for the window to be maximized before recreating the swapchain
-        loop {
-            if let Some(LogicalSize { width, height }) = self.window.get_inner_size() {
-                if width > 0.0 && height > 0.0 {
-                    break;
-                }
-            }
-        }
-
-        unsafe { self.vulkan_context.device.device_wait_idle()? };
-
-        unsafe { self.cleanup_swapchain() };
-
-        // Swapchain
-        let (
-            swapchain,
-            swapchain_khr,
-            swapchain_extent,
-            swapchain_format,
-            swapchain_images,
-            swapchain_image_views,
-        ) = create_vulkan_swapchain(&self.vulkan_context)?;
-
-        // Renderpass
-        let render_pass = create_vulkan_render_pass(&self.vulkan_context.device, swapchain_format)?;
-
-        // Framebuffers
-        let framebuffers = create_vulkan_framebuffers(
-            &self.vulkan_context.device,
-            render_pass,
-            swapchain_extent,
-            &swapchain_image_views,
-        )?;
-
-        self.swapchain = swapchain;
-        self.swapchain_extent = swapchain_extent;
-        self.swapchain_khr = swapchain_khr;
-        self.swapchain_images = swapchain_images;
-        self.swapchain_image_views = swapchain_image_views;
-        self.render_pass = render_pass;
-        self.framebuffers = framebuffers;
-
-        Ok(())
-    }
-
-    unsafe fn cleanup_swapchain(&mut self) {
-        self.framebuffers
-            .iter()
-            .for_each(|fb| self.vulkan_context.device.destroy_framebuffer(*fb, None));
-        self.framebuffers.clear();
-        self.vulkan_context
-            .device
-            .destroy_render_pass(self.render_pass, None);
-        self.swapchain_image_views
-            .iter()
-            .for_each(|v| self.vulkan_context.device.destroy_image_view(*v, None));
-        self.swapchain_image_views.clear();
-        self.swapchain.destroy_swapchain(self.swapchain_khr, None);
-    }
-
-    pub fn run<F: FnMut(&mut bool, &mut Ui)>(
-        &mut self,
-        mut ui_builder: F,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn run<B>(self, mut app: A, mut ui_builder: B) -> Result<(), Box<dyn Error>>
+    where
+        B: FnMut(&mut bool, &mut Ui, &mut A) + 'static,
+    {
         log::info!("Starting application");
+
+        let Self {
+            window,
+            event_loop,
+            vulkan_context,
+            command_buffer,
+            mut swapchain,
+            image_available_semaphore,
+            render_finished_semaphore,
+            fence,
+            mut imgui,
+            mut platform,
+            mut renderer,
+            ..
+        } = self;
+
         let mut last_frame = Instant::now();
         let mut run = true;
-        // Main loop
-        loop {
-            // Processing events
-            // UI stuff
-            let mut io = self.imgui.io_mut();
-            let platform = &mut self.platform;
-            let window = &self.window;
+        let mut dirty_swapchain = false;
 
-            self.events_loop.poll_events(|event| {
-                platform.handle_event(&mut io, window, &event);
-                if let Event::WindowEvent {
+        // Main loop
+        event_loop.run(move |event, _, control_flow| {
+            *control_flow = ControlFlow::Poll;
+
+            if dirty_swapchain {
+                let PhysicalSize { width, height } = window.inner_size();
+                if width > 0 && height > 0 {
+                    swapchain
+                        .recreate(&vulkan_context)
+                        .expect("Failed to recreate swapchain");
+                    dirty_swapchain = false;
+                } else {
+                    return;
+                }
+            }
+
+            match event {
+                // New frame
+                Event::NewEvents(_) => {
+                    last_frame = imgui.io_mut().update_delta_time(last_frame);
+                }
+                // End of event processing
+                Event::MainEventsCleared => {
+                    // Generate UI
+                    platform
+                        .prepare_frame(imgui.io_mut(), &window)
+                        .expect("Failed to prepare frame");
+                    let mut ui = imgui.frame();
+                    ui_builder(&mut run, &mut ui, &mut app);
+                    platform.prepare_render(&ui, &window);
+                    let draw_data = ui.render();
+
+                    if !run {
+                        return;
+                    }
+
+                    unsafe {
+                        vulkan_context
+                            .device
+                            .wait_for_fences(&[fence], true, std::u64::MAX)
+                            .expect("Failed to wait ")
+                    };
+
+                    // Drawing the frame
+                    let next_image_result = unsafe {
+                        swapchain.loader.acquire_next_image(
+                            swapchain.khr,
+                            std::u64::MAX,
+                            image_available_semaphore,
+                            vk::Fence::null(),
+                        )
+                    };
+                    let image_index = match next_image_result {
+                        Ok((image_index, _)) => image_index,
+                        Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                            dirty_swapchain = true;
+                            return;
+                        }
+                        Err(error) => panic!("Error while acquiring next image. Cause: {}", error),
+                    };
+
+                    unsafe {
+                        vulkan_context
+                            .device
+                            .reset_fences(&[fence])
+                            .expect("Failed to reset fences")
+                    };
+
+                    let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+                    let wait_semaphores = [image_available_semaphore];
+                    let signal_semaphores = [render_finished_semaphore];
+
+                    // Re-record commands to draw geometry
+                    record_command_buffers(
+                        &vulkan_context,
+                        command_buffer,
+                        swapchain.framebuffers[image_index as usize],
+                        swapchain.render_pass,
+                        swapchain.extent,
+                        &mut renderer,
+                        &draw_data,
+                    )
+                    .expect("Failed to record command buffer");
+
+                    let command_buffers = [command_buffer];
+                    let submit_info = [vk::SubmitInfo::builder()
+                        .wait_semaphores(&wait_semaphores)
+                        .wait_dst_stage_mask(&wait_stages)
+                        .command_buffers(&command_buffers)
+                        .signal_semaphores(&signal_semaphores)
+                        .build()];
+                    unsafe {
+                        vulkan_context
+                            .device
+                            .queue_submit(vulkan_context.graphics_queue, &submit_info, fence)
+                            .expect("Failed to submit work to gpu.")
+                    };
+
+                    let swapchains = [swapchain.khr];
+                    let images_indices = [image_index];
+                    let present_info = vk::PresentInfoKHR::builder()
+                        .wait_semaphores(&signal_semaphores)
+                        .swapchains(&swapchains)
+                        .image_indices(&images_indices);
+
+                    let present_result = unsafe {
+                        swapchain
+                            .loader
+                            .queue_present(vulkan_context.present_queue, &present_info)
+                    };
+                    match present_result {
+                        Ok(is_suboptimal) if is_suboptimal => {
+                            dirty_swapchain = true;
+                        }
+                        Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                            dirty_swapchain = true;
+                        }
+                        Err(error) => panic!("Failed to present queue. Cause: {}", error),
+                        _ => {}
+                    }
+                }
+                // Resizing
+                Event::WindowEvent {
+                    event: WindowEvent::Resized(new_size),
+                    ..
+                } => {
+                    log::debug!("Window was resized. New size is {:?}", new_size);
+                }
+                // Exit
+                Event::WindowEvent {
                     event: WindowEvent::CloseRequested,
                     ..
-                } = event
-                {
-                    run = false;
+                } => run = false,
+                // Cleanup
+                Event::LoopDestroyed => {
+                    log::info!("Stopping application");
+
+                    unsafe {
+                        vulkan_context
+                            .device
+                            .device_wait_idle()
+                            .expect("Failed to wait for graphics device to idle.");
+
+                        app.destroy(&vulkan_context);
+
+                        renderer
+                            .destroy(&vulkan_context)
+                            .expect("Failed to destroy renderer.");
+                        vulkan_context.device.destroy_fence(fence, None);
+                        vulkan_context
+                            .device
+                            .destroy_semaphore(image_available_semaphore, None);
+                        vulkan_context
+                            .device
+                            .destroy_semaphore(render_finished_semaphore, None);
+
+                        swapchain.destroy(&vulkan_context);
+
+                        vulkan_context
+                            .device
+                            .free_command_buffers(vulkan_context.command_pool, &[command_buffer]);
+                    }
                 }
-            });
-
-            // Generate UI
-            platform.prepare_frame(io, &window)?;
-            last_frame = io.update_delta_time(last_frame);
-            let mut ui = self.imgui.frame();
-            ui_builder(&mut run, &mut ui);
-            platform.prepare_render(&ui, &window);
-            let draw_data = ui.render();
-
-            let fence = self.fence;
-            unsafe {
-                self.vulkan_context
-                    .device
-                    .wait_for_fences(&[fence], true, std::u64::MAX)?
-            };
+                event => {
+                    platform.handle_event(imgui.io_mut(), &window, &event);
+                }
+            }
 
             if !run {
-                break;
+                *control_flow = ControlFlow::Exit;
             }
-
-            // Drawing the frame
-            let next_image_result = unsafe {
-                self.swapchain.acquire_next_image(
-                    self.swapchain_khr,
-                    std::u64::MAX,
-                    self.image_available_semaphore,
-                    vk::Fence::null(),
-                )
-            };
-            let image_index = match next_image_result {
-                Ok((image_index, _)) => image_index,
-                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                    self.recreate_swapchain()?;
-                    continue;
-                }
-                Err(error) => panic!("Error while acquiring next image. Cause: {}", error),
-            };
-
-            unsafe { self.vulkan_context.device.reset_fences(&[fence])? };
-
-            let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-            let wait_semaphores = [self.image_available_semaphore];
-            let signal_semaphores = [self.render_finished_semaphore];
-
-            // Re-record commands to draw geometry
-            record_command_buffers(
-                &self.vulkan_context,
-                self.command_buffer,
-                self.framebuffers[image_index as usize],
-                self.render_pass,
-                self.swapchain_extent,
-                &mut self.renderer,
-                &draw_data,
-            )?;
-
-            let command_buffers = [self.command_buffer];
-            let submit_info = [vk::SubmitInfo::builder()
-                .wait_semaphores(&wait_semaphores)
-                .wait_dst_stage_mask(&wait_stages)
-                .command_buffers(&command_buffers)
-                .signal_semaphores(&signal_semaphores)
-                .build()];
-            unsafe {
-                self.vulkan_context.device.queue_submit(
-                    self.vulkan_context.graphics_queue,
-                    &submit_info,
-                    fence,
-                )?
-            };
-
-            let swapchains = [self.swapchain_khr];
-            let images_indices = [image_index];
-            let present_info = vk::PresentInfoKHR::builder()
-                .wait_semaphores(&signal_semaphores)
-                .swapchains(&swapchains)
-                .image_indices(&images_indices);
-
-            let present_result = unsafe {
-                self.swapchain
-                    .queue_present(self.vulkan_context.present_queue, &present_info)
-            };
-            match present_result {
-                Ok(is_suboptimal) if is_suboptimal => {
-                    self.recreate_swapchain()?;
-                }
-                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                    self.recreate_swapchain()?;
-                }
-                Err(error) => panic!("Failed to present queue. Cause: {}", error),
-                _ => {}
-            }
-        }
-
-        // Wait for gpu to finish work
-        unsafe { self.vulkan_context.device.device_wait_idle()? };
-
-        log::info!("Stopping application");
-        Ok(())
-    }
-}
-
-impl Drop for System {
-    fn drop(&mut self) {
-        unsafe {
-            self.renderer.destroy(&self.vulkan_context).unwrap();
-            self.vulkan_context.device.destroy_fence(self.fence, None);
-            self.vulkan_context
-                .device
-                .destroy_semaphore(self.image_available_semaphore, None);
-            self.vulkan_context
-                .device
-                .destroy_semaphore(self.render_finished_semaphore, None);
-            self.cleanup_swapchain();
-            self.vulkan_context
-                .device
-                .free_command_buffers(self.vulkan_context.command_pool, &[self.command_buffer]);
-        }
+        });
     }
 }
 
@@ -466,16 +444,97 @@ impl Drop for VulkanContext {
     }
 }
 
-fn create_window(title: &str) -> Result<(Window, EventsLoop), Box<dyn Error>> {
+struct Swapchain {
+    loader: SwapchainLoader,
+    extent: vk::Extent2D,
+    khr: vk::SwapchainKHR,
+    images: Vec<vk::Image>,
+    image_views: Vec<vk::ImageView>,
+    render_pass: vk::RenderPass,
+    framebuffers: Vec<vk::Framebuffer>,
+}
+
+impl Swapchain {
+    fn new(vulkan_context: &VulkanContext) -> Result<Self, Box<dyn Error>> {
+        // Swapchain
+        let (loader, khr, extent, format, images, image_views) =
+            create_vulkan_swapchain(&vulkan_context)?;
+
+        // Renderpass
+        let render_pass = create_vulkan_render_pass(&vulkan_context.device, format)?;
+
+        // Framebuffers
+        let framebuffers =
+            create_vulkan_framebuffers(&vulkan_context.device, render_pass, extent, &image_views)?;
+
+        Ok(Self {
+            loader,
+            extent,
+            khr,
+            images,
+            image_views,
+            render_pass,
+            framebuffers,
+        })
+    }
+
+    fn recreate(&mut self, vulkan_context: &VulkanContext) -> Result<(), Box<dyn Error>> {
+        log::debug!("Recreating the swapchain");
+
+        unsafe { vulkan_context.device.device_wait_idle()? };
+
+        self.destroy(vulkan_context);
+
+        // Swapchain
+        let (loader, khr, extent, format, images, image_views) =
+            create_vulkan_swapchain(vulkan_context)?;
+
+        // Renderpass
+        let render_pass = create_vulkan_render_pass(&vulkan_context.device, format)?;
+
+        // Framebuffers
+        let framebuffers =
+            create_vulkan_framebuffers(&vulkan_context.device, render_pass, extent, &image_views)?;
+
+        self.loader = loader;
+        self.extent = extent;
+        self.khr = khr;
+        self.images = images;
+        self.image_views = image_views;
+        self.render_pass = render_pass;
+        self.framebuffers = framebuffers;
+
+        Ok(())
+    }
+
+    fn destroy(&mut self, vulkan_context: &VulkanContext) {
+        unsafe {
+            self.framebuffers
+                .iter()
+                .for_each(|fb| vulkan_context.device.destroy_framebuffer(*fb, None));
+            self.framebuffers.clear();
+            vulkan_context
+                .device
+                .destroy_render_pass(self.render_pass, None);
+            self.image_views
+                .iter()
+                .for_each(|v| vulkan_context.device.destroy_image_view(*v, None));
+            self.image_views.clear();
+            self.loader.destroy_swapchain(self.khr, None);
+        }
+    }
+}
+
+fn create_window(title: &str) -> Result<(Window, EventLoop<()>), Box<dyn Error>> {
     log::debug!("Creating window and event loop");
-    let events_loop = EventsLoop::new();
+    let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title(title)
-        .with_dimensions(LogicalSize::new(f64::from(WIDTH), f64::from(HEIGHT)))
+        .with_inner_size(PhysicalSize::new(WIDTH, HEIGHT))
         .with_resizable(false)
-        .build(&events_loop)?;
+        .build(&event_loop)?;
 
-    Ok((window, events_loop))
+    Ok((window, event_loop))
 }
 
 fn create_vulkan_instance(
@@ -587,7 +646,7 @@ fn create_vulkan_physical_device_and_get_graphics_and_present_qs_indices(
             };
             let extention_support = extension_props.iter().any(|ext| {
                 let name = unsafe { CStr::from_ptr(ext.extension_name.as_ptr()) };
-                Swapchain::name() == name
+                SwapchainLoader::name() == name
             });
 
             // Does the device have available formats for the given surface
@@ -644,7 +703,7 @@ fn create_vulkan_device_and_graphics_and_present_qs(
             .collect::<Vec<_>>()
     };
 
-    let device_extensions_ptrs = [Swapchain::name().as_ptr()];
+    let device_extensions_ptrs = [SwapchainLoader::name().as_ptr()];
 
     let device_create_info = vk::DeviceCreateInfo::builder()
         .queue_create_infos(&queue_create_infos)
@@ -661,7 +720,7 @@ fn create_vulkan_swapchain(
     vulkan_context: &VulkanContext,
 ) -> Result<
     (
-        Swapchain,
+        SwapchainLoader,
         vk::SwapchainKHR,
         vk::Extent2D,
         vk::Format,
@@ -771,7 +830,7 @@ fn create_vulkan_swapchain(
             .clipped(true)
     };
 
-    let swapchain = Swapchain::new(&vulkan_context.instance, &vulkan_context.device);
+    let swapchain = SwapchainLoader::new(&vulkan_context.instance, &vulkan_context.device);
     let swapchain_khr = unsafe { swapchain.create_swapchain(&create_info, None)? };
 
     // Swapchain images and image views
@@ -930,7 +989,7 @@ mod surface {
     use ash::vk;
     use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
     use std::os::raw::c_char;
-    use winit::Window;
+    use winit::window::Window;
 
     #[derive(Copy, Clone, Debug)]
     pub enum SurfaceError {

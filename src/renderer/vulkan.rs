@@ -403,8 +403,8 @@ mod texture {
 
             let (image, image_mem) = {
                 let extent = vk::Extent3D {
-                    width: width,
-                    height: height,
+                    width,
+                    height,
                     depth: 1,
                 };
 
@@ -485,8 +485,8 @@ mod texture {
                     })
                     .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
                     .image_extent(vk::Extent3D {
-                        width: width,
-                        height: height,
+                        width,
+                        height,
                         depth: 1,
                     })
                     .build();

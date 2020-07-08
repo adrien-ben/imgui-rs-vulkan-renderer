@@ -9,7 +9,7 @@ const APP_NAME: &str = "test window impl";
 fn main() -> Result<(), Box<dyn Error>> {
     simple_logger::init()?;
     let mut state = State::default();
-    System::new(APP_NAME)?.run(|run, ui| show_test_window(ui, &mut state, run))?;
+    System::new(APP_NAME)?.run((), move |run, ui, _| show_test_window(ui, &mut state, run))?;
 
     Ok(())
 }
