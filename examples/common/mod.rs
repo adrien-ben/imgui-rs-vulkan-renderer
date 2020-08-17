@@ -169,17 +169,7 @@ impl<A: App> System<A> {
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
 
-            if dirty_swapchain {
-                let PhysicalSize { width, height } = window.inner_size();
-                if width > 0 && height > 0 {
-                    swapchain
-                        .recreate(&vulkan_context)
-                        .expect("Failed to recreate swapchain");
-                    dirty_swapchain = false;
-                } else {
-                    return;
-                }
-            }
+            platform.handle_event(imgui.io_mut(), &window, &event);
 
             match event {
                 // New frame
@@ -188,6 +178,22 @@ impl<A: App> System<A> {
                 }
                 // End of event processing
                 Event::MainEventsCleared => {
+                    // If swapchain must be recreated wait for windows to not be minimized anymore
+                    if dirty_swapchain {
+                        let PhysicalSize { width, height } = window.inner_size();
+                        if width > 0 && height > 0 {
+                            swapchain
+                                .recreate(&vulkan_context)
+                                .expect("Failed to recreate swapchain");
+                            renderer
+                                .set_render_pass(&vulkan_context, swapchain.render_pass)
+                                .expect("Failed to rebuild renderer pipeline");
+                            dirty_swapchain = false;
+                        } else {
+                            return;
+                        }
+                    }
+
                     // Generate UI
                     platform
                         .prepare_frame(imgui.io_mut(), &window)
@@ -292,6 +298,7 @@ impl<A: App> System<A> {
                     ..
                 } => {
                     log::debug!("Window was resized. New size is {:?}", new_size);
+                    dirty_swapchain = true;
                 }
                 // Exit
                 Event::WindowEvent {
@@ -328,9 +335,7 @@ impl<A: App> System<A> {
                             .free_command_buffers(vulkan_context.command_pool, &[command_buffer]);
                     }
                 }
-                event => {
-                    platform.handle_event(imgui.io_mut(), &window, &event);
-                }
+                _ => (),
             }
 
             if !run {
@@ -532,7 +537,7 @@ fn create_window(title: &str) -> Result<(Window, EventLoop<()>), Box<dyn Error>>
     let window = WindowBuilder::new()
         .with_title(title)
         .with_inner_size(PhysicalSize::new(WIDTH, HEIGHT))
-        .with_resizable(false)
+        .with_resizable(true)
         .build(&event_loop)?;
 
     Ok((window, event_loop))

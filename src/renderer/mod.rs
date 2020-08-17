@@ -162,6 +162,40 @@ impl Renderer {
         })
     }
 
+    /// Change the render pass to render to.
+    ///
+    /// Useful if you need to render to a new render pass but don't want to rebuild
+    /// the entire renderer. It will rebuild the graphics pipeline from scratch so it
+    /// is an expensive operation.
+    ///
+    /// # Arguments
+    ///
+    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `render_pass` - The render pass used to render the gui.
+    ///
+    /// # Errors
+    ///
+    /// * [`RendererError`] - If any Vulkan error is encountered during pipeline creation.
+    /// * [`RendererError`] - If the method is call after [`destroy`] was called.
+    ///
+    /// [`RendererVkContext`]: trait.RendererVkContext.html
+    /// [`RendererError`]: enum.RendererError.html
+    /// [`destroy`]: #method.destroy
+    pub fn set_render_pass<C: RendererVkContext>(
+        &mut self,
+        vk_context: &C,
+        render_pass: vk::RenderPass,
+    ) -> RendererResult<()> {
+        if self.destroyed {
+            return Err(RendererError::Destroyed);
+        }
+
+        unsafe { vk_context.device().destroy_pipeline(self.pipeline, None) };
+        self.pipeline =
+            create_vulkan_pipeline(vk_context.device(), self.pipeline_layout, render_pass)?;
+        Ok(())
+    }
+
     /// Returns the texture mapping used by the renderer to lookup textures.
     ///
     /// Textures are provided by the application as `vk::DescriptorSet`s.
@@ -206,7 +240,7 @@ impl Renderer {
     ///
     /// # Errors
     ///
-    /// * [`RendererError`] - If any Vulkan is encountered during command recording.
+    /// * [`RendererError`] - If any Vulkan error is encountered during command recording.
     /// * [`RendererError`] - If the method is call after [`destroy`] was called.
     ///
     /// [`RendererVkContext`]: trait.RendererVkContext.html
