@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+
+- Bump imgui-rs to 0.5.0
+
 ## 0.4.2
 
 - Add `Renderer::set_render_pass` to change the target render pass
