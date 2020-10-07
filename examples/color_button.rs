@@ -2,12 +2,13 @@ mod common;
 
 use common::*;
 use imgui::*;
+use simple_logger::SimpleLogger;
 use std::error::Error;
 
 const APP_NAME: &str = "color button";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    simple_logger::init()?;
+    SimpleLogger::new().init()?;
     let mut state = State::default();
     System::new(APP_NAME)?.run((), move |run, ui, _| {
         example_selector(run, ui, &mut state);

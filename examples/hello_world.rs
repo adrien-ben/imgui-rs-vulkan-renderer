@@ -2,12 +2,13 @@ mod common;
 
 use common::*;
 use imgui::*;
+use simple_logger::SimpleLogger;
 use std::error::Error;
 
 const APP_NAME: &str = "hello world";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    simple_logger::init()?;
+    SimpleLogger::new().init()?;
     System::new(APP_NAME)?.run((), |_, ui, _| {
         Window::new(im_str!("Hello world"))
             .size([300.0, 100.0], Condition::FirstUseEver)

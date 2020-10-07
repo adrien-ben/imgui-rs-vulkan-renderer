@@ -2,12 +2,13 @@ mod common;
 
 use common::*;
 use imgui::*;
+use simple_logger::SimpleLogger;
 use std::error::Error;
 
 const APP_NAME: &str = "progress bar";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    simple_logger::init()?;
+    SimpleLogger::new().init()?;
     System::new(APP_NAME)?.run((), |run, ui, _| {
         let w = Window::new(im_str!("Progress bar"))
             .opened(run)

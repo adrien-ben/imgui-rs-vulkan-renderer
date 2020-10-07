@@ -2,12 +2,13 @@ mod common;
 
 use common::*;
 use imgui::*;
+use simple_logger::SimpleLogger;
 use std::error::Error;
 
 const APP_NAME: &str = "collapsing headers";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    simple_logger::init()?;
+    SimpleLogger::new().init()?;
     let mut state = State {
         render_closable: true,
     };

@@ -12,6 +12,7 @@ use imgui_rs_vulkan_renderer::RendererVkContext;
 use std::error::Error;
 
 use image::{self, GenericImageView};
+use simple_logger::SimpleLogger;
 
 const APP_NAME: &str = "custom textures";
 
@@ -203,7 +204,7 @@ impl App for CustomTexturesApp {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    simple_logger::init()?;
+    SimpleLogger::new().init()?;
     let mut system = System::new(APP_NAME)?;
     let my_app = CustomTexturesApp::new(&system.vulkan_context, system.renderer.textures());
     system.run(my_app, move |_, ui, app| {
