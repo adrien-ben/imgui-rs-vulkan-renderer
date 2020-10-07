@@ -174,7 +174,8 @@ impl<A: App> System<A> {
             match event {
                 // New frame
                 Event::NewEvents(_) => {
-                    last_frame = imgui.io_mut().update_delta_time(last_frame);
+                    imgui.io_mut().update_delta_time(last_frame.elapsed());
+                    last_frame = Instant::now();
                 }
                 // End of event processing
                 Event::MainEventsCleared => {

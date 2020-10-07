@@ -59,6 +59,8 @@ struct State {
     dont_ask_me_next_time: bool,
     stacked_modals_item: usize,
     stacked_modals_color: [f32; 4],
+
+    tabs: TabState,
 }
 
 impl Default for State {
@@ -114,6 +116,41 @@ impl Default for State {
             dont_ask_me_next_time: false,
             stacked_modals_item: 0,
             stacked_modals_color: [0.4, 0.7, 0.0, 0.5],
+            tabs: TabState::default(),
+        }
+    }
+}
+
+struct TabState {
+    // flags for the advanced tab example
+    reorderable: bool,
+    autoselect: bool,
+    listbutton: bool,
+    noclose_middlebutton: bool,
+    fitting_resizedown: bool,
+    fitting_scroll: bool,
+
+    // opened state for tab items
+    artichoke_tab: bool,
+    beetroot_tab: bool,
+    celery_tab: bool,
+    daikon_tab: bool,
+}
+
+impl Default for TabState {
+    fn default() -> Self {
+        Self {
+            reorderable: true,
+            autoselect: false,
+            listbutton: false,
+            noclose_middlebutton: false,
+            fitting_resizedown: true,
+            fitting_scroll: false,
+
+            artichoke_tab: true,
+            beetroot_tab: true,
+            celery_tab: true,
+            daikon_tab: true,
         }
     }
 }
@@ -370,6 +407,7 @@ fn show_test_window(ui: &Ui, state: &mut State, opened: &mut bool) {
                     });
                 }
             });
+
             TreeNode::new(im_str!("Bullets")).build(&ui, || {
                 ui.bullet_text(im_str!("Bullet point 1"));
                 ui.bullet_text(im_str!("Bullet point 2\nOn multiple lines"));
@@ -402,7 +440,7 @@ fn show_test_window(ui: &Ui, state: &mut State, opened: &mut bool) {
                 ));
                 ui.spacing();
 
-                Slider::new(im_str!("Wrap width"), -20.0 ..= 600.0)
+                Slider::new(im_str!("Wrap width")).range(-20.0 ..= 600.0)
                     .display_format(im_str!("%.0f"))
                     .build(ui, &mut state.wrap_width);
 
@@ -460,16 +498,12 @@ fn show_test_window(ui: &Ui, state: &mut State, opened: &mut bool) {
             ui.input_text(im_str!("input text"), &mut state.text)
                 .build();
             ui.input_int(im_str!("input int"), &mut state.i0).build();
-            ui.drag_int(im_str!("drag int"), &mut state.i0).build();
+            Drag::new(im_str!("drag int")).build(ui, &mut state.i0);
             ui.input_float(im_str!("input float"), &mut state.f0)
                 .step(0.01)
                 .step_fast(1.0)
                 .build();
-            ui.drag_float(im_str!("drag float"), &mut state.f0)
-                .speed(0.001)
-                .min(-1.0)
-                .max(1.0)
-                .build();
+            Drag::new(im_str!("drag float")).range(-1.0..=1.0).speed(0.001).build(ui, &mut state.f0);
             ui.input_float3(im_str!("input float3"), &mut state.vec3f)
                 .build();
             ColorEdit::new(im_str!("color 1"), &mut state.col1).build(ui);
@@ -588,6 +622,80 @@ CTRL+click on individual component to input value.\n",
                     b = b.reference_color(&s.ref_color_v)
                 }
                 b.build(ui);
+            });
+        }
+
+        if CollapsingHeader::new(im_str!("Layout")).build(&ui) {
+            TreeNode::new(im_str!("Tabs")).build(&ui, || {
+                TreeNode::new(im_str!("Basic")).build(&ui, || {
+                    TabBar::new(im_str!("basictabbar")).build(&ui, || {
+                        TabItem::new(im_str!("Avocado")).build(&ui, || {
+                            ui.text(im_str!("This is the Avocado tab!"));
+                            ui.text(im_str!("blah blah blah blah blah"));
+                        });
+                        TabItem::new(im_str!("Broccoli")).build(&ui, || {
+                            ui.text(im_str!("This is the Broccoli tab!"));
+                            ui.text(im_str!("blah blah blah blah blah"));
+                        });
+                        TabItem::new(im_str!("Cucumber")).build(&ui, || {
+                            ui.text(im_str!("This is the Cucumber tab!"));
+                            ui.text(im_str!("blah blah blah blah blah"));
+                        });
+                    });
+
+                });
+                TreeNode::new(im_str!("Advanced & Close button")).build(&ui, || {
+
+                    ui.separator();
+                    let s = &mut state.tabs;
+
+                    ui.checkbox(im_str!("ImGuiTabBarFlags_Reorderable"), &mut s.reorderable);
+                    ui.checkbox(im_str!("ImGuiTabBarFlags_AutoSelectNewTabs"), &mut s.autoselect);
+                    ui.checkbox(im_str!("ImGuiTabBarFlags_TabListPopupButton"), &mut s.listbutton);
+                    ui.checkbox(im_str!("ImGuiTabBarFlags_NoCloseWithMiddleMouseButton"), &mut s.noclose_middlebutton);
+                    if ui.checkbox(im_str!("ImGuiTabBarFlags_FittingPolicyResizeDown"), &mut s.fitting_resizedown) {
+                        s.fitting_scroll = !s.fitting_resizedown;
+                    }
+                    if ui.checkbox(im_str!("ImGuiTabBarFlags_FittingPolicyScroll"), &mut s.fitting_scroll) {
+                        s.fitting_resizedown = !s.fitting_scroll;
+                    }
+                    let style = ui.push_style_var(StyleVar::FramePadding([0.0, 0.0]));
+                    ui.checkbox(im_str!("Artichoke"), &mut s.artichoke_tab);
+                    ui.same_line(0.0);
+                    ui.checkbox(im_str!("Beetroot"), &mut s.beetroot_tab);
+                    ui.same_line(0.0);
+                    ui.checkbox(im_str!("Celery"), &mut s.celery_tab);
+                    ui.same_line(0.0);
+                    ui.checkbox(im_str!("Daikon"), &mut s.daikon_tab);
+                    style.pop(ui);
+
+                    let flags = {
+                        let mut f = TabBarFlags::empty();
+                        f.set(TabBarFlags::REORDERABLE, s.reorderable);
+                        f.set(TabBarFlags::AUTO_SELECT_NEW_TABS, s.autoselect);
+                        f.set(TabBarFlags::TAB_LIST_POPUP_BUTTON, s.listbutton);
+                        f.set(TabBarFlags::NO_CLOSE_WITH_MIDDLE_MOUSE_BUTTON, s.noclose_middlebutton);
+                        f.set(TabBarFlags::FITTING_POLICY_RESIZE_DOWN, s.fitting_resizedown);
+                        f.set(TabBarFlags::FITTING_POLICY_SCROLL, s.fitting_scroll);
+                        f
+                    };
+
+                    TabBar::new(im_str!("tabbar")).flags(flags).build(&ui, || {
+                        TabItem::new(im_str!("Artichoke")).opened(&mut s.artichoke_tab).build(&ui, || {
+                            ui.text(im_str!("This is the Artichoke tab!"));
+                        });
+                        TabItem::new(im_str!("Beetroot")).opened(&mut s.beetroot_tab).build(&ui, || {
+                            ui.text(im_str!("This is the Beetroot tab!"));
+                        });
+                        TabItem::new(im_str!("Celery")).opened(&mut s.celery_tab).build(&ui, || {
+                            ui.text(im_str!("This is the Celery tab!"));
+                        });
+                        TabItem::new(im_str!("Daikon")).opened(&mut s.daikon_tab).build(&ui, || {
+                            ui.text(im_str!("This is the Daikon tab!"));
+                        });
+                    });
+
+                });
             });
         }
         if CollapsingHeader::new(im_str!("Popups & Modal windows")).build(&ui) {
@@ -749,7 +857,9 @@ fn show_example_menu_file<'a>(ui: &Ui<'a>, state: &mut FileMenuState) {
                     ui.text(format!("Scrolling Text {}", i));
                 }
             });
-        Slider::new(im_str!("Value"), 0.0..=1.0).build(ui, &mut state.f);
+        Slider::new(im_str!("Value"))
+            .range(0.0..=1.0)
+            .build(ui, &mut state.f);
 
         ui.input_float(im_str!("Input"), &mut state.f)
             .step(0.1)
@@ -784,7 +894,9 @@ fn show_example_app_auto_resize(ui: &Ui, state: &mut AutoResizeState, opened: &m
 Note that you probably don't want to query the window size to
 output your content because that would create a feedback loop.",
             );
-            Slider::new(im_str!("Number of lines"), 1..=20).build(ui, &mut state.lines);
+            Slider::new(im_str!("Number of lines"))
+                .range(1..=20)
+                .build(ui, &mut state.lines);
             for i in 0..state.lines {
                 ui.text(format!("{:2$}This is line {}", "", i, i as usize * 4));
             }
