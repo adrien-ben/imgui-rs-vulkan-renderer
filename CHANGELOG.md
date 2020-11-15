@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Bump imgui-rs to 0.6.0
+
 ## 0.5.0
 
 - Bump imgui-rs to 0.5.0
