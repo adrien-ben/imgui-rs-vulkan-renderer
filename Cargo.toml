@@ -16,11 +16,15 @@ exclude = [
     "compile_shaders.*"
 ]
 
+[features]
+vma = ["vk-mem"]
+
 [dependencies]
 log = "0.4"
 imgui = "^0.6"
 ash = ">=0.29"
 ultraviolet = "0.7"
+vk-mem = { version = "0.2.2", optional = true }
 
 [dev-dependencies]
 simple_logger = "1.11"

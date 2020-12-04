@@ -66,6 +66,7 @@ impl CustomTexturesApp {
                 vk_context.queue(),
                 vk_context.command_pool(),
                 memory_properties,
+                &None,
                 WIDTH as u32,
                 HEIGHT as u32,
                 &data,
@@ -144,6 +145,7 @@ impl Lenna {
             vk_context.queue(),
             vk_context.command_pool(),
             memory_properties,
+            &None,
             width,
             height,
             &data,
@@ -183,7 +185,7 @@ impl Lenna {
         unsafe {
             let device = context.device();
             device.destroy_descriptor_pool(self.descriptor_pool, None);
-            self.texture.destroy(device);
+            self.texture.destroy(device, &None);
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
     }
@@ -194,7 +196,7 @@ impl App for CustomTexturesApp {
         unsafe {
             let device = context.device();
             device.destroy_descriptor_pool(self.descriptor_pool, None);
-            self.my_texture.destroy(device);
+            self.my_texture.destroy(device, &None);
             if let Some(lenna) = &mut self.lenna {
                 lenna.destroy(context);
             }

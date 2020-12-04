@@ -9,6 +9,23 @@ pub(crate) use buffer::*;
 use std::{ffi::CString, mem};
 pub use texture::*;
 
+#[cfg(feature = "vma")]
+use vk_mem;
+
+#[cfg(not(feature = "vma"))]
+pub type Memory = vk::DeviceMemory;
+
+#[cfg(not(feature = "vma"))]
+pub type Allocator = Option<vk::AllocationCallbacks>;
+
+#[cfg(feature = "vma")]
+pub type Memory = vk_mem::Allocation;
+
+#[cfg(feature = "vma")]
+pub type Allocator = vk_mem::Allocator;
+
+pub struct XX {}
+
 /// Return a `&[u8]` for any sized object passed in.
 pub(crate) unsafe fn any_as_u8_slice<T: Sized>(any: &T) -> &[u8] {
     let ptr = (any as *const T) as *const u8;
@@ -255,34 +272,91 @@ pub fn create_vulkan_descriptor_set(
 
 mod buffer {
 
+    use super::{Allocator, Memory};
     use crate::RendererResult;
+    use ash::prelude::VkResult;
     use ash::{version::DeviceV1_0, vk, Device};
+    use core::ffi::c_void;
     use std::mem;
 
-    pub fn create_and_fill_buffer<T: Copy>(
-        data: &[T],
-        device: &Device,
-        usage: vk::BufferUsageFlags,
-        mem_properties: vk::PhysicalDeviceMemoryProperties,
-    ) -> RendererResult<(vk::Buffer, vk::DeviceMemory)> {
-        let size = data.len() * mem::size_of::<T>();
-        let (buffer, memory) = create_buffer(size, device, usage, mem_properties)?;
-        update_buffer_content(device, memory, data)?;
-        Ok((buffer, memory))
-    }
+    #[cfg(feature = "vma")]
+    use crate::error::RendererError;
 
-    pub fn create_buffer(
-        size: usize,
+    /*pub fn create_and_fill_buffer<T: Copy>(
         device: &Device,
-        usage: vk::BufferUsageFlags,
+        allocator: &Allocator,
         mem_properties: vk::PhysicalDeviceMemoryProperties,
-    ) -> RendererResult<(vk::Buffer, vk::DeviceMemory)> {
-        let buffer_info = vk::BufferCreateInfo::builder()
+        usage: vk::BufferUsageFlags,
+        data: &[T],
+    ) -> RendererResult<(vk::Buffer, Memory)> {
+        let size = data.len() * mem::size_of::<T>();
+        let (buffer, memory) = create_host_coherent_buffer(device, allocator, mem_properties, usage, size)?;
+        update_buffer_content(device, allocator, &memory, data)?;
+        Ok((buffer, memory))
+    }*/
+
+    pub fn create_host_coherent_buffer(
+        device: &Device,
+        allocator: &Allocator,
+        mem_properties: vk::PhysicalDeviceMemoryProperties,
+        usage: vk::BufferUsageFlags,
+        size: usize,
+    ) -> RendererResult<(vk::Buffer, Memory)> {
+        let buffer_create_info = vk::BufferCreateInfo::builder()
             .size(size as _)
             .usage(usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .build();
-        let buffer = unsafe { device.create_buffer(&buffer_info, None)? };
+        create_buffer(device, allocator, mem_properties, &buffer_create_info)
+    }
+
+    pub fn create_staging_buffer(
+        device: &Device,
+        allocator: &Allocator,
+        mem_properties: vk::PhysicalDeviceMemoryProperties,
+        usage: vk::BufferUsageFlags,
+        size: usize,
+    ) -> RendererResult<(vk::Buffer, Memory)> {
+        let buffer_create_info = vk::BufferCreateInfo::builder()
+            .size(size as _)
+            .usage(usage)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .build();
+        create_buffer(device, allocator, mem_properties, &buffer_create_info)
+    }
+
+    pub fn update_buffer_content<T: Copy>(
+        device: &Device,
+        allocator: &Allocator,
+        buffer_memory: &Memory,
+        data: &[T],
+    ) -> RendererResult<()> {
+        unsafe {
+            let size = (data.len() * mem::size_of::<T>()) as _;
+
+            let data_ptr = map_memory(
+                device,
+                allocator,
+                buffer_memory,
+                0,
+                size,
+                vk::MemoryMapFlags::empty(),
+            )?;
+            let mut align = ash::util::Align::new(data_ptr, mem::align_of::<T>() as _, size);
+            align.copy_from_slice(&data);
+            unmap_memory(device, allocator, buffer_memory);
+        };
+        Ok(())
+    }
+
+    #[cfg(not(feature = "vma"))]
+    fn create_buffer(
+        device: &Device,
+        allocator: &Allocator,
+        mem_properties: vk::PhysicalDeviceMemoryProperties,
+        buffer_create_info: &vk::BufferCreateInfo,
+    ) -> RendererResult<(vk::Buffer, Memory)> {
+        let buffer = unsafe { device.create_buffer(&buffer_create_info, allocator.as_ref())? };
 
         let mem_requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
         let mem_type = find_memory_type(
@@ -291,30 +365,89 @@ mod buffer {
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         );
 
-        let alloc_info = vk::MemoryAllocateInfo::builder()
+        let memory_allocate_info = vk::MemoryAllocateInfo::builder()
             .allocation_size(mem_requirements.size)
             .memory_type_index(mem_type);
-        let memory = unsafe { device.allocate_memory(&alloc_info, None)? };
+        let memory = unsafe { device.allocate_memory(&memory_allocate_info, allocator.as_ref())? };
         unsafe { device.bind_buffer_memory(buffer, memory, 0)? };
 
         Ok((buffer, memory))
     }
 
-    pub fn update_buffer_content<T: Copy>(
+    #[cfg(not(feature = "vma"))]
+    pub(crate) fn destroy_buffer(
         device: &Device,
-        buffer_memory: vk::DeviceMemory,
-        data: &[T],
-    ) -> RendererResult<()> {
+        allocator: &Allocator,
+        buffer: vk::Buffer,
+        memory: &Memory,
+    ) {
         unsafe {
-            let size = (data.len() * mem::size_of::<T>()) as _;
+            device.destroy_buffer(buffer, allocator.as_ref());
+            device.free_memory(*memory, None);
+        }
+    }
 
-            let data_ptr =
-                device.map_memory(buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
-            let mut align = ash::util::Align::new(data_ptr, mem::align_of::<T>() as _, size);
-            align.copy_from_slice(&data);
-            device.unmap_memory(buffer_memory);
+    #[cfg(feature = "vma")]
+    fn create_buffer(
+        _device: &Device,
+        allocator: &Allocator,
+        _mem_properties: vk::PhysicalDeviceMemoryProperties,
+        buffer_create_info: &vk::BufferCreateInfo,
+    ) -> RendererResult<(vk::Buffer, Memory)> {
+        let allocation_create_info = vk_mem::AllocationCreateInfo {
+            usage: vk_mem::MemoryUsage::CpuToGpu,
+            ..Default::default()
         };
-        Ok(())
+
+        let (buffer, allocation, _allocation_info) = allocator
+            .create_buffer(&buffer_create_info, &allocation_create_info)
+            .unwrap();
+
+        Ok((buffer, allocation))
+    }
+
+    #[cfg(feature = "vma")]
+    pub(crate) fn destroy_buffer(
+        _device: &Device,
+        allocator: &Allocator,
+        buffer: vk::Buffer,
+        memory: &Memory,
+    ) {
+        allocator.destroy_buffer(buffer, memory);
+    }
+
+    #[cfg(not(feature = "vma"))]
+    fn map_memory(
+        device: &Device,
+        _allocator: &Allocator,
+        memory: &vk::DeviceMemory,
+        offset: vk::DeviceSize,
+        size: vk::DeviceSize,
+        flags: vk::MemoryMapFlags,
+    ) -> VkResult<*mut c_void> {
+        unsafe { device.map_memory(*memory, offset, size, flags) }
+    }
+
+    #[cfg(not(feature = "vma"))]
+    fn unmap_memory(device: &Device, _allocator: &Allocator, memory: &vk::DeviceMemory) {
+        unsafe { device.unmap_memory(*memory) }
+    }
+
+    #[cfg(feature = "vma")]
+    fn map_memory(
+        _device: &Device,
+        allocator: &Allocator,
+        memory: &vk_mem::Allocation,
+        _offset: vk::DeviceSize,
+        _size: vk::DeviceSize,
+        _flags: vk::MemoryMapFlags,
+    ) -> VkResult<*mut c_void> {
+        Ok(allocator.map_memory(memory).unwrap() as _)
+    }
+
+    #[cfg(feature = "vma")]
+    fn unmap_memory(_device: &Device, allocator: &Allocator, memory: &vk_mem::Allocation) {
+        allocator.unmap_memory(memory).unwrap()
     }
 
     pub fn find_memory_type(
@@ -337,7 +470,7 @@ mod buffer {
 
 mod texture {
 
-    use super::buffer::*;
+    use super::{buffer::*, Allocator, Memory};
     use crate::RendererResult;
     use ash::vk;
     use ash::{version::DeviceV1_0, Device};
@@ -345,7 +478,7 @@ mod texture {
     /// Helper struct representing a sampled texture.
     pub struct Texture {
         pub image: vk::Image,
-        image_mem: vk::DeviceMemory,
+        image_mem: Memory,
         pub image_view: vk::ImageView,
         pub sampler: vk::Sampler,
     }
@@ -369,37 +502,47 @@ mod texture {
             transfer_queue: vk::Queue,
             command_pool: vk::CommandPool,
             mem_properties: vk::PhysicalDeviceMemoryProperties,
+            allocator: &Allocator,
             width: u32,
             height: u32,
             data: &[u8],
         ) -> RendererResult<Self> {
             let (texture, staging_buff, staging_mem) =
                 execute_one_time_commands(device, transfer_queue, command_pool, |buffer| {
-                    Self::cmd_from_rgba(device, buffer, mem_properties, width, height, data)
+                    Self::cmd_from_rgba(
+                        device,
+                        allocator,
+                        mem_properties,
+                        buffer,
+                        width,
+                        height,
+                        data,
+                    )
                 })??;
 
-            unsafe {
-                device.destroy_buffer(staging_buff, None);
-                device.free_memory(staging_mem, None);
-            }
+            destroy_buffer(device, allocator, staging_buff, &staging_mem);
 
             Ok(texture)
         }
 
         fn cmd_from_rgba(
             device: &Device,
-            command_buffer: vk::CommandBuffer,
+            allocator: &Allocator,
             mem_properties: vk::PhysicalDeviceMemoryProperties,
+            command_buffer: vk::CommandBuffer,
             width: u32,
             height: u32,
             data: &[u8],
-        ) -> RendererResult<(Self, vk::Buffer, vk::DeviceMemory)> {
-            let (buffer, buffer_mem) = create_and_fill_buffer(
-                data,
+        ) -> RendererResult<(Self, vk::Buffer, Memory)> {
+            // TODO this buffer should be CPU only ?
+            let (buffer, buffer_mem) = create_staging_buffer(
                 device,
-                vk::BufferUsageFlags::TRANSFER_SRC,
+                allocator,
                 mem_properties,
+                vk::BufferUsageFlags::TRANSFER_SRC,
+                std::mem::size_of_val(data),
             )?;
+            update_buffer_content(device, allocator, &buffer_mem, data)?;
 
             let (image, image_mem) = {
                 let extent = vk::Extent3D {
@@ -408,7 +551,7 @@ mod texture {
                     depth: 1,
                 };
 
-                let image_info = vk::ImageCreateInfo::builder()
+                let image_create_info = vk::ImageCreateInfo::builder()
                     .image_type(vk::ImageType::TYPE_2D)
                     .extent(extent)
                     .mip_levels(1)
@@ -421,24 +564,7 @@ mod texture {
                     .samples(vk::SampleCountFlags::TYPE_1)
                     .flags(vk::ImageCreateFlags::empty());
 
-                let image = unsafe { device.create_image(&image_info, None)? };
-                let mem_requirements = unsafe { device.get_image_memory_requirements(image) };
-                let mem_type_index = find_memory_type(
-                    mem_requirements,
-                    mem_properties,
-                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                );
-
-                let alloc_info = vk::MemoryAllocateInfo::builder()
-                    .allocation_size(mem_requirements.size)
-                    .memory_type_index(mem_type_index);
-                let memory = unsafe {
-                    let mem = device.allocate_memory(&alloc_info, None)?;
-                    device.bind_image_memory(image, mem, 0)?;
-                    mem
-                };
-
-                (image, memory)
+                create_image(device, allocator, mem_properties, &image_create_info)?
             };
 
             // Transition the image layout and copy the buffer into the image
@@ -565,12 +691,11 @@ mod texture {
         }
 
         /// Free texture's resources.
-        pub fn destroy(&mut self, device: &Device) {
+        pub fn destroy(&mut self, device: &Device, allocator: &Allocator) {
             unsafe {
                 device.destroy_sampler(self.sampler, None);
                 device.destroy_image_view(self.image_view, None);
-                device.destroy_image(self.image, None);
-                device.free_memory(self.image_mem, None);
+                destroy_image(device, allocator, self.image, &self.image_mem);
             }
         }
     }
@@ -620,5 +745,62 @@ mod texture {
         unsafe { device.free_command_buffers(pool, &command_buffers) };
 
         Ok(executor_result)
+    }
+
+    #[cfg(not(feature = "vma"))]
+    fn create_image(
+        device: &Device,
+        allocator: &Allocator,
+        mem_properties: vk::PhysicalDeviceMemoryProperties,
+        image_create_info: &vk::ImageCreateInfo,
+    ) -> RendererResult<(vk::Image, Memory)> {
+        let image = unsafe { device.create_image(&image_create_info, None)? };
+        let mem_requirements = unsafe { device.get_image_memory_requirements(image) };
+        let mem_type_index = find_memory_type(
+            mem_requirements,
+            mem_properties,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
+        let memory_allocate_info = vk::MemoryAllocateInfo::builder()
+            .allocation_size(mem_requirements.size)
+            .memory_type_index(mem_type_index);
+        let memory = unsafe {
+            let mem = device.allocate_memory(&memory_allocate_info, allocator.as_ref())?;
+            device.bind_image_memory(image, mem, 0)?;
+            mem
+        };
+        Ok((image, memory))
+    }
+
+    #[cfg(not(feature = "vma"))]
+    fn destroy_image(device: &Device, allocator: &Allocator, image: vk::Image, memory: &Memory) {
+        unsafe {
+            device.destroy_image(image, allocator.as_ref());
+            device.free_memory(*memory, None);
+        }
+    }
+
+    #[cfg(feature = "vma")]
+    fn create_image(
+        _device: &Device,
+        allocator: &Allocator,
+        _mem_properties: vk::PhysicalDeviceMemoryProperties,
+        image_create_info: &vk::ImageCreateInfo,
+    ) -> RendererResult<(vk::Image, Memory)> {
+        let allocation_create_info = vk_mem::AllocationCreateInfo {
+            usage: vk_mem::MemoryUsage::GpuOnly,
+            ..Default::default()
+        };
+
+        let (image, allocation, _allocation_info) = allocator
+            .create_image(&image_create_info, &allocation_create_info)
+            .unwrap();
+
+        Ok((image, allocation))
+    }
+
+    #[cfg(feature = "vma")]
+    fn destroy_image(_device: &Device, allocator: &Allocator, image: vk::Image, memory: &Memory) {
+        allocator.destroy_image(image, memory);
     }
 }
