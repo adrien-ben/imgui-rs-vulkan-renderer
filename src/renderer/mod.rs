@@ -1,10 +1,7 @@
 pub mod vulkan;
 
 use crate::RendererError;
-use ash::{
-    version::{DeviceV1_0, InstanceV1_0},
-    vk, Device, Instance,
-};
+use ash::{version::DeviceV1_0, vk, Device, Instance};
 use imgui::{Context, DrawCmd, DrawCmdParams, DrawData, TextureId, Textures};
 use mesh::*;
 use ultraviolet::projection::orthographic_vk;
@@ -111,44 +108,17 @@ impl Renderer {
         let pipeline = create_vulkan_pipeline(vk_context.device(), pipeline_layout, render_pass)?;
 
         // Allocator
-        #[cfg(not(feature = "vma"))]
-        let allocator = None;
-
-        // vk_mem Allocator
-        #[cfg(feature = "vma")]
-        let allocator = {
-            let create_info = vk_mem::AllocatorCreateInfo {
-                physical_device: vk_context.physical_device(),
-                device: vk_context.device().clone(),
-                instance: vk_context.instance().clone(),
-                flags: vk_mem::AllocatorCreateFlags::NONE,
-                preferred_large_heap_block_size: 0,
-                frame_in_use_count: in_flight_frames as u32,
-                heap_size_limits: None,
-            };
-            let allocator = match vk_mem::Allocator::new(&create_info) {
-                Ok(v) => v,
-                Err(e) => return Err(RendererError::Init(e.to_string())),
-            };
-            allocator
-        };
+        let allocator = Allocator::new(vk_context, in_flight_frames as _);
 
         // Fonts texture
         let fonts_texture = {
             let mut fonts = imgui.fonts();
             let atlas_texture = fonts.build_rgba32_texture();
-            let memory_properties = unsafe {
-                vk_context
-                    .instance()
-                    .get_physical_device_memory_properties(vk_context.physical_device())
-            };
-
             Texture::from_rgba8(
                 vk_context.device(),
+                &allocator,
                 vk_context.queue(),
                 vk_context.command_pool(),
-                memory_properties,
-                &allocator,
                 atlas_texture.width,
                 atlas_texture.height,
                 &atlas_texture.data,
@@ -454,11 +424,7 @@ impl Renderer {
             device.destroy_descriptor_pool(self.descriptor_pool, None);
             self.fonts_texture.destroy(device, &self.allocator);
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
-            #[cfg(feature = "vma")]
-            {
-                self.allocator.destroy();
-            }
-
+            self.allocator.destroy();
         }
         self.destroyed = true;
 
@@ -508,7 +474,7 @@ mod mesh {
 
     use super::{vulkan::*, RendererVkContext};
     use crate::RendererResult;
-    use ash::{version::InstanceV1_0, vk, Device};
+    use ash::{vk, Device};
     use imgui::{DrawData, DrawVert};
     use std::mem::size_of;
 
@@ -534,25 +500,16 @@ mod mesh {
             let index_count = indices.len();
 
             // Create a vertex buffer
-            let memory_properties = unsafe {
-                vk_context
-                    .instance()
-                    .get_physical_device_memory_properties(vk_context.physical_device())
-            };
-            let (vertices_buf, vertices_mem) = create_host_coherent_buffer(
-                vk_context.device(),
+            let (vertices_buf, vertices_mem) = create_buffer(
                 allocator,
-                memory_properties,
                 vk::BufferUsageFlags::VERTEX_BUFFER,
                 vertices.len() * std::mem::size_of_val(&vertices),
             )?;
             update_buffer_content(vk_context.device(), allocator, &vertices_mem, &vertices)?;
 
             // Create an index buffer
-            let (indices_buf, indices_mem) = create_host_coherent_buffer(
-                vk_context.device(),
+            let (indices_buf, indices_mem) = create_buffer(
                 allocator,
-                memory_properties,
                 vk::BufferUsageFlags::INDEX_BUFFER,
                 indices.len() * std::mem::size_of_val(&indices),
             )?;
@@ -574,25 +531,14 @@ mod mesh {
             draw_data: &DrawData,
             allocator: &Allocator,
         ) -> RendererResult<()> {
-            let memory_properties = unsafe {
-                vk_context
-                    .instance()
-                    .get_physical_device_memory_properties(vk_context.physical_device())
-            };
-
             let vertices = create_vertices(draw_data);
             if draw_data.total_vtx_count as usize > self.vertex_count {
                 log::trace!("Resizing vertex buffers");
                 self.destroy_vertices(vk_context.device(), allocator);
                 let vertex_count = vertices.len();
                 let size = vertex_count * size_of::<DrawVert>();
-                let (vertices, vertices_mem) = create_host_coherent_buffer(
-                    vk_context.device(),
-                    allocator,
-                    memory_properties,
-                    vk::BufferUsageFlags::VERTEX_BUFFER,
-                    size,
-                )?;
+                let (vertices, vertices_mem) =
+                    create_buffer(allocator, vk::BufferUsageFlags::VERTEX_BUFFER, size)?;
 
                 self.vertices = vertices;
                 self.vertices_mem = vertices_mem;
@@ -611,13 +557,8 @@ mod mesh {
                 self.destroy_indices(vk_context.device(), allocator);
                 let index_count = indices.len();
                 let size = index_count * size_of::<u16>();
-                let (indices, indices_mem) = create_host_coherent_buffer(
-                    vk_context.device(),
-                    allocator,
-                    memory_properties,
-                    vk::BufferUsageFlags::INDEX_BUFFER,
-                    size,
-                )?;
+                let (indices, indices_mem) =
+                    create_buffer(allocator, vk::BufferUsageFlags::INDEX_BUFFER, size)?;
                 self.indices = indices;
                 self.indices_mem = indices_mem;
                 self.index_count = index_count;
@@ -632,12 +573,12 @@ mod mesh {
             self.destroy_vertices(device, allocator);
         }
 
-        fn destroy_vertices(&self, device: &Device, allocator: &Allocator) {
-            destroy_buffer(device, allocator, self.vertices, &self.vertices_mem);
+        fn destroy_vertices(&self, _device: &Device, allocator: &Allocator) {
+            allocator.destroy_buffer(self.vertices, &self.vertices_mem);
         }
 
-        fn destroy_indices(&self, device: &Device, allocator: &Allocator) {
-            destroy_buffer(device, allocator, self.indices, &self.indices_mem);
+        fn destroy_indices(&self, _device: &Device, allocator: &Allocator) {
+            allocator.destroy_buffer(self.indices, &self.indices_mem);
         }
     }
 
