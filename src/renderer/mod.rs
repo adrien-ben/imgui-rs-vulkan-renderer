@@ -308,16 +308,19 @@ impl Renderer {
         unsafe {
             vk_context.device().cmd_bind_index_buffer(
                 command_buffer,
-                mesh.indices,
+                mesh.index_buffer,
                 0,
                 vk::IndexType::UINT16,
             )
         };
 
         unsafe {
-            vk_context
-                .device()
-                .cmd_bind_vertex_buffers(command_buffer, 0, &[mesh.vertices], &[0])
+            vk_context.device().cmd_bind_vertex_buffers(
+                command_buffer,
+                0,
+                &[mesh.vertex_buffer],
+                &[0],
+            )
         };
 
         let mut index_offset = 0;
@@ -476,15 +479,15 @@ mod mesh {
     use crate::RendererResult;
     use ash::{vk, Device};
     use imgui::{DrawData, DrawVert};
-    use std::mem::size_of;
+    use std::mem::size_of_val;
 
     /// Vertex and index buffer resources for one frame in flight.
     pub struct Mesh {
-        pub vertices: vk::Buffer,
-        vertices_mem: Memory,
+        pub vertex_buffer: vk::Buffer,
+        vertex_memory: Memory,
         vertex_count: usize,
-        pub indices: vk::Buffer,
-        indices_mem: Memory,
+        pub index_buffer: vk::Buffer,
+        index_memory: Memory,
         index_count: usize,
     }
 
@@ -500,27 +503,27 @@ mod mesh {
             let index_count = indices.len();
 
             // Create a vertex buffer
-            let (vertices_buf, vertices_mem) = create_buffer(
+            let (vertex_buffer, vertex_memory) = create_buffer(
                 allocator,
                 vk::BufferUsageFlags::VERTEX_BUFFER,
                 vertices.len() * std::mem::size_of_val(&vertices),
             )?;
-            update_buffer_content(vk_context.device(), allocator, &vertices_mem, &vertices)?;
+            update_buffer_content(vk_context.device(), allocator, &vertex_memory, &vertices)?;
 
             // Create an index buffer
-            let (indices_buf, indices_mem) = create_buffer(
+            let (index_buffer, index_memory) = create_buffer(
                 allocator,
                 vk::BufferUsageFlags::INDEX_BUFFER,
                 indices.len() * std::mem::size_of_val(&indices),
             )?;
-            update_buffer_content(vk_context.device(), allocator, &indices_mem, &indices)?;
+            update_buffer_content(vk_context.device(), allocator, &index_memory, &indices)?;
 
             Ok(Mesh {
-                vertices: vertices_buf,
-                vertices_mem,
+                vertex_buffer,
+                vertex_memory,
                 vertex_count,
-                indices: indices_buf,
-                indices_mem,
+                index_buffer,
+                index_memory,
                 index_count,
             })
         }
@@ -536,18 +539,18 @@ mod mesh {
                 log::trace!("Resizing vertex buffers");
                 self.destroy_vertices(vk_context.device(), allocator);
                 let vertex_count = vertices.len();
-                let size = vertex_count * size_of::<DrawVert>();
-                let (vertices, vertices_mem) =
+                let size = vertex_count * size_of_val(&vertices);
+                let (buffer, memory) =
                     create_buffer(allocator, vk::BufferUsageFlags::VERTEX_BUFFER, size)?;
 
-                self.vertices = vertices;
-                self.vertices_mem = vertices_mem;
+                self.vertex_buffer = buffer;
+                self.vertex_memory = memory;
                 self.vertex_count = vertex_count;
             }
             update_buffer_content(
                 vk_context.device(),
                 allocator,
-                &self.vertices_mem,
+                &self.vertex_memory,
                 &vertices,
             )?;
 
@@ -556,14 +559,14 @@ mod mesh {
                 log::trace!("Resizing index buffers");
                 self.destroy_indices(vk_context.device(), allocator);
                 let index_count = indices.len();
-                let size = index_count * size_of::<u16>();
-                let (indices, indices_mem) =
+                let size = index_count * size_of_val(&indices);
+                let (buffer, memory) =
                     create_buffer(allocator, vk::BufferUsageFlags::INDEX_BUFFER, size)?;
-                self.indices = indices;
-                self.indices_mem = indices_mem;
+                self.index_buffer = buffer;
+                self.index_memory = memory;
                 self.index_count = index_count;
             }
-            update_buffer_content(vk_context.device(), allocator, &self.indices_mem, &indices)?;
+            update_buffer_content(vk_context.device(), allocator, &self.index_memory, &indices)?;
 
             Ok(())
         }
@@ -574,11 +577,11 @@ mod mesh {
         }
 
         fn destroy_vertices(&self, _device: &Device, allocator: &Allocator) {
-            allocator.destroy_buffer(self.vertices, &self.vertices_mem);
+            allocator.destroy_buffer(self.vertex_buffer, &self.vertex_memory);
         }
 
         fn destroy_indices(&self, _device: &Device, allocator: &Allocator) {
-            allocator.destroy_buffer(self.indices, &self.indices_mem);
+            allocator.destroy_buffer(self.index_buffer, &self.index_memory);
         }
     }
 
