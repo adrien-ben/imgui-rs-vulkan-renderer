@@ -3,7 +3,10 @@ mod common;
 use ash::{version::DeviceV1_0, vk};
 use common::*;
 use imgui::*;
-use imgui_rs_vulkan_renderer::vulkan::*;
+use imgui_rs_vulkan_renderer::vulkan::{
+    create_vulkan_descriptor_pool, create_vulkan_descriptor_set,
+    create_vulkan_descriptor_set_layout, Allocator, Texture,
+};
 use imgui_rs_vulkan_renderer::RendererVkContext;
 
 use std::error::Error;

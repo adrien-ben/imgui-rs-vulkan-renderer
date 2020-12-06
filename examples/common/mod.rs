@@ -7,7 +7,7 @@ use ash::{
     vk, Device, Entry, Instance,
 };
 use imgui::*;
-use imgui_rs_vulkan_renderer::*;
+use imgui_rs_vulkan_renderer::{Renderer, RendererVkContext};
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::{
     error::Error,

@@ -3,218 +3,11 @@
 //! A set of functions used to ease Vulkan resources creations. These are supposed to be internal but
 //! are exposed since they might help users create descriptors sets when using the custom textures.
 
-use crate::{RendererResult, RendererVkContext};
-#[cfg(not(feature = "vma"))]
-use ash::version::InstanceV1_0;
-use ash::{prelude::VkResult, version::DeviceV1_0, vk, Device};
-pub(crate) use buffer::*;
-use core::ffi::c_void;
+use crate::RendererResult;
+use ash::{version::DeviceV1_0, vk, Device};
+pub(crate) use buffer::{create_buffer, update_buffer_content};
 use std::{ffi::CString, mem};
-pub use texture::*;
-
-#[cfg(not(feature = "vma"))]
-pub type Memory = vk::DeviceMemory;
-
-#[cfg(not(feature = "vma"))]
-pub struct Allocator {
-    device: Device,
-    memory_properties: vk::PhysicalDeviceMemoryProperties,
-}
-
-#[cfg(not(feature = "vma"))]
-impl Allocator {
-    pub fn new(vk_context: &dyn RendererVkContext, _frame_in_use_count: u32) -> Self {
-        let memory_properties = unsafe {
-            vk_context
-                .instance()
-                .get_physical_device_memory_properties(vk_context.physical_device())
-        };
-        Allocator {
-            device: vk_context.device().clone(), // !!!
-            memory_properties,
-        }
-    }
-
-    pub fn destroy(&mut self) {}
-
-    pub(crate) fn create_buffer(
-        &self,
-        buffer_create_info: &vk::BufferCreateInfo,
-    ) -> RendererResult<(vk::Buffer, Memory)> {
-        let buffer = unsafe { self.device.create_buffer(&buffer_create_info, None)? };
-        let mem_requirements = unsafe { self.device.get_buffer_memory_requirements(buffer) };
-        let mem_type = Self::find_memory_type(
-            mem_requirements,
-            self.memory_properties,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        );
-        let memory_allocate_info = vk::MemoryAllocateInfo::builder()
-            .allocation_size(mem_requirements.size)
-            .memory_type_index(mem_type);
-        let memory = unsafe {
-            let memory = self.device.allocate_memory(&memory_allocate_info, None)?;
-            self.device.bind_buffer_memory(buffer, memory, 0)?;
-            memory
-        };
-        Ok((buffer, memory))
-    }
-
-    pub(crate) fn destroy_buffer(&self, buffer: vk::Buffer, memory: &Memory) {
-        unsafe {
-            self.device.destroy_buffer(buffer, None);
-            self.device.free_memory(*memory, None);
-        }
-    }
-
-    pub(crate) fn map_memory(&self, memory: &vk::DeviceMemory) -> VkResult<*mut c_void> {
-        unsafe {
-            self.device
-                .map_memory(*memory, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::default())
-        }
-    }
-
-    pub(crate) fn unmap_memory(&self, memory: &vk::DeviceMemory) {
-        unsafe { self.device.unmap_memory(*memory) }
-    }
-
-    pub fn create_image(
-        &self,
-        image_create_info: &vk::ImageCreateInfo,
-    ) -> RendererResult<(vk::Image, Memory)> {
-        let image = unsafe { self.device.create_image(&image_create_info, None)? };
-        let mem_requirements = unsafe { self.device.get_image_memory_requirements(image) };
-        let mem_type_index = Self::find_memory_type(
-            mem_requirements,
-            self.memory_properties,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        );
-        let memory_allocate_info = vk::MemoryAllocateInfo::builder()
-            .allocation_size(mem_requirements.size)
-            .memory_type_index(mem_type_index);
-        let memory = unsafe {
-            let memory = self.device.allocate_memory(&memory_allocate_info, None)?;
-            self.device.bind_image_memory(image, memory, 0)?;
-            memory
-        };
-        Ok((image, memory))
-    }
-
-    fn destroy_image(&self, image: vk::Image, memory: &Memory) {
-        unsafe {
-            self.device.destroy_image(image, None);
-            self.device.free_memory(*memory, None);
-        }
-    }
-
-    fn find_memory_type(
-        requirements: vk::MemoryRequirements,
-        mem_properties: vk::PhysicalDeviceMemoryProperties,
-        required_properties: vk::MemoryPropertyFlags,
-    ) -> u32 {
-        for i in 0..mem_properties.memory_type_count {
-            if requirements.memory_type_bits & (1 << i) != 0
-                && mem_properties.memory_types[i as usize]
-                    .property_flags
-                    .contains(required_properties)
-            {
-                return i;
-            }
-        }
-        panic!("Failed to find suitable memory type.")
-    }
-}
-
-#[cfg(feature = "vma")]
-use vk_mem;
-
-#[cfg(feature = "vma")]
-pub type Memory = vk_mem::Allocation;
-
-#[cfg(feature = "vma")]
-pub struct Allocator {
-    allocator: vk_mem::Allocator,
-}
-
-#[cfg(feature = "vma")]
-impl Allocator {
-    pub(crate) fn new(vk_context: &dyn RendererVkContext, frame_in_use_count: u32) -> Self {
-        let allocator = {
-            let create_info = vk_mem::AllocatorCreateInfo {
-                physical_device: vk_context.physical_device(),
-                device: vk_context.device().clone(),
-                instance: vk_context.instance().clone(),
-                flags: vk_mem::AllocatorCreateFlags::NONE,
-                preferred_large_heap_block_size: 0,
-                frame_in_use_count,
-                heap_size_limits: None,
-            };
-            let allocator = match vk_mem::Allocator::new(&create_info) {
-                Ok(v) => v,
-                Err(e) => panic!(e.to_string()),
-            };
-            allocator
-        };
-        Allocator { allocator }
-    }
-
-    pub fn destroy(&mut self) {
-        self.allocator.destroy();
-    }
-
-    pub(crate) fn create_buffer(
-        &self,
-        buffer_create_info: &vk::BufferCreateInfo,
-    ) -> RendererResult<(vk::Buffer, Memory)> {
-        let allocation_create_info = vk_mem::AllocationCreateInfo {
-            usage: vk_mem::MemoryUsage::CpuToGpu,
-            ..Default::default()
-        };
-
-        let (buffer, allocation, _allocation_info) = self
-            .allocator
-            .create_buffer(&buffer_create_info, &allocation_create_info)
-            .unwrap();
-
-        Ok((buffer, allocation))
-    }
-
-    pub(crate) fn destroy_buffer(&self, buffer: vk::Buffer, memory: &Memory) {
-        self.allocator
-            .destroy_buffer(buffer, memory)
-            .expect("Failed to destroy buffer!");
-    }
-
-    pub(crate) fn map_memory(&self, memory: &vk_mem::Allocation) -> VkResult<*mut c_void> {
-        Ok(self.allocator.map_memory(memory).unwrap() as _)
-    }
-
-    pub(crate) fn unmap_memory(&self, memory: &vk_mem::Allocation) {
-        self.allocator.unmap_memory(memory).unwrap()
-    }
-
-    pub(crate) fn create_image(
-        &self,
-        image_create_info: &vk::ImageCreateInfo,
-    ) -> RendererResult<(vk::Image, Memory)> {
-        let allocation_create_info = vk_mem::AllocationCreateInfo {
-            usage: vk_mem::MemoryUsage::GpuOnly,
-            ..Default::default()
-        };
-
-        let (image, allocation, _allocation_info) = self
-            .allocator
-            .create_image(&image_create_info, &allocation_create_info)
-            .unwrap();
-
-        Ok((image, allocation))
-    }
-
-    pub(crate) fn destroy_image(&self, image: vk::Image, memory: &Memory) {
-        self.allocator
-            .destroy_image(image, memory)
-            .expect("Failed to destroy image!");
-    }
-}
+pub(crate) use texture::Texture;
 
 /// Return a `&[u8]` for any sized object passed in.
 pub(crate) unsafe fn any_as_u8_slice<T: Sized>(any: &T) -> &[u8] {
@@ -223,7 +16,7 @@ pub(crate) unsafe fn any_as_u8_slice<T: Sized>(any: &T) -> &[u8] {
 }
 
 /// Create a descriptor set layout compatible with the graphics pipeline.
-pub fn create_vulkan_descriptor_set_layout(
+pub(crate) fn create_vulkan_descriptor_set_layout(
     device: &Device,
 ) -> RendererResult<vk::DescriptorSetLayout> {
     log::debug!("Creating vulkan descriptor set layout");
@@ -406,7 +199,7 @@ fn read_shader_from_source(source: &[u8]) -> RendererResult<Vec<u32>> {
 }
 
 /// Create a descriptor pool of sets compatible with the graphics pipeline.
-pub fn create_vulkan_descriptor_pool(
+pub(crate) fn create_vulkan_descriptor_pool(
     device: &Device,
     max_sets: u32,
 ) -> RendererResult<vk::DescriptorPool> {
@@ -423,7 +216,7 @@ pub fn create_vulkan_descriptor_pool(
 }
 
 /// Create a descriptor set compatible with the graphics pipeline from a texture.
-pub fn create_vulkan_descriptor_set(
+pub(crate) fn create_vulkan_descriptor_set(
     device: &Device,
     set_layout: vk::DescriptorSetLayout,
     descriptor_pool: vk::DescriptorPool,
@@ -462,12 +255,12 @@ pub fn create_vulkan_descriptor_set(
 
 mod buffer {
 
-    use super::{Allocator, Memory};
-    use crate::RendererResult;
+    use super::RendererResult;
+    use crate::allocator::{Allocator, Memory};
     use ash::{vk, Device};
     use std::mem;
 
-    pub fn create_buffer(
+    pub(crate) fn create_buffer(
         allocator: &Allocator,
         usage: vk::BufferUsageFlags,
         size: usize,
@@ -480,7 +273,7 @@ mod buffer {
         allocator.create_buffer(&buffer_create_info)
     }
 
-    pub fn create_staging_buffer(
+    pub(crate) fn create_staging_buffer(
         allocator: &Allocator,
         usage: vk::BufferUsageFlags,
         size: usize,
@@ -493,7 +286,7 @@ mod buffer {
         allocator.create_buffer(&buffer_create_info)
     }
 
-    pub fn update_buffer_content<T: Copy>(
+    pub(crate) fn update_buffer_content<T: Copy>(
         _device: &Device,
         allocator: &Allocator,
         buffer_memory: &Memory,
@@ -513,13 +306,13 @@ mod buffer {
 
 mod texture {
 
-    use super::{buffer::*, Allocator, Memory};
-    use crate::RendererResult;
+    use super::{buffer::{create_staging_buffer, update_buffer_content}, RendererResult};
+    use crate::allocator::{Allocator, Memory};
     use ash::vk;
     use ash::{version::DeviceV1_0, Device};
 
     /// Helper struct representing a sampled texture.
-    pub struct Texture {
+    pub(crate) struct Texture {
         pub image: vk::Image,
         image_mem: Memory,
         pub image_view: vk::ImageView,

@@ -1,9 +1,10 @@
-pub mod vulkan;
+pub(crate) mod allocator;
+pub(crate) mod vulkan;
 
-use crate::RendererError;
+use crate::{allocator::Allocator, RendererError};
 use ash::{version::DeviceV1_0, vk, Device, Instance};
 use imgui::{Context, DrawCmd, DrawCmdParams, DrawData, TextureId, Textures};
-use mesh::*;
+use mesh::Mesh;
 use ultraviolet::projection::orthographic_vk;
 use vulkan::*;
 
@@ -35,7 +36,7 @@ pub trait RendererVkContext {
 
     /// Return a Vulkan command pool.
     ///
-    /// The pool will be used to allocate command buffers to upload textures to the gpu.
+    /// The pool will be used to allocate command buffers.
     fn command_pool(&self) -> vk::CommandPool;
 }
 
@@ -475,14 +476,13 @@ impl Frames {
 
 mod mesh {
 
-    use super::{vulkan::*, RendererVkContext};
-    use crate::RendererResult;
+    use super::{allocator::*, vulkan::*, RendererResult, RendererVkContext};
     use ash::{vk, Device};
     use imgui::{DrawData, DrawVert};
     use std::mem::size_of_val;
 
     /// Vertex and index buffer resources for one frame in flight.
-    pub struct Mesh {
+    pub(super) struct Mesh {
         pub vertex_buffer: vk::Buffer,
         vertex_memory: Memory,
         vertex_count: usize,
