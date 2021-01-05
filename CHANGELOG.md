@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- Do not apply framebuffer scaling on projection matrix
+
 ## 0.6.0
 
 - Bump imgui-rs to 0.6.0
