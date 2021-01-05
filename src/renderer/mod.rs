@@ -292,8 +292,14 @@ impl Renderer {
         };
 
         // Ortho projection
-        let projection =
-            orthographic_vk(0.0, framebuffer_width, 0.0, -framebuffer_height, -1.0, 1.0);
+        let projection = orthographic_vk(
+            0.0,
+            draw_data.display_size[0],
+            0.0,
+            -draw_data.display_size[1],
+            -1.0,
+            1.0,
+        );
         unsafe {
             let push = any_as_u8_slice(&projection);
             vk_context.device().cmd_push_constants(
