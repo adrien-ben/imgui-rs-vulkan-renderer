@@ -131,7 +131,7 @@ impl Lenna {
         let image =
             image::load_from_memory_with_format(lenna_bytes, image::ImageFormat::Jpeg).unwrap();
         let (width, height) = image.dimensions();
-        let data = image.into_rgba();
+        let data = image.into_rgba8();
 
         let memory_properties = unsafe {
             vk_context
