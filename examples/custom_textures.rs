@@ -1,12 +1,12 @@
 mod common;
 
-use ash::{
-    version::{DeviceV1_0, InstanceV1_0},
-    vk,
-};
+use ash::{version::DeviceV1_0, vk};
 use common::*;
 use imgui::*;
-use imgui_rs_vulkan_renderer::vulkan::*;
+use imgui_rs_vulkan_renderer::vulkan::{
+    create_vulkan_descriptor_pool, create_vulkan_descriptor_set,
+    create_vulkan_descriptor_set_layout, Allocator, Texture,
+};
 use imgui_rs_vulkan_renderer::RendererVkContext;
 
 use std::error::Error;
@@ -17,6 +17,7 @@ use simple_logger::SimpleLogger;
 const APP_NAME: &str = "custom textures";
 
 struct CustomTexturesApp {
+    allocator: Allocator,
     descriptor_set_layout: vk::DescriptorSetLayout,
     descriptor_pool: vk::DescriptorPool,
     _descriptor_set: vk::DescriptorSet,
@@ -42,6 +43,8 @@ impl CustomTexturesApp {
         const WIDTH: usize = 100;
         const HEIGHT: usize = 100;
 
+        let allocator = Allocator::new(vk_context, 1);
+
         // Generate dummy texture
         let my_texture = {
             let mut data = Vec::with_capacity(WIDTH * HEIGHT);
@@ -54,18 +57,11 @@ impl CustomTexturesApp {
                     data.push(255 as u8);
                 }
             }
-
-            let memory_properties = unsafe {
-                vk_context
-                    .instance()
-                    .get_physical_device_memory_properties(vk_context.physical_device())
-            };
-
             Texture::from_rgba8(
                 vk_context.device(),
+                &allocator,
                 vk_context.queue(),
                 vk_context.command_pool(),
-                memory_properties,
                 WIDTH as u32,
                 HEIGHT as u32,
                 &data,
@@ -92,9 +88,10 @@ impl CustomTexturesApp {
         let my_texture_id = Some(texture_id);
 
         // Lenna
-        let lenna = Some(Lenna::new(vk_context, textures).unwrap());
+        let lenna = Some(Lenna::new(vk_context, &allocator, textures).unwrap());
 
         CustomTexturesApp {
+            allocator,
             descriptor_set_layout,
             descriptor_pool,
             _descriptor_set: descriptor_set,
@@ -125,6 +122,7 @@ impl CustomTexturesApp {
 impl Lenna {
     fn new<C: RendererVkContext>(
         vk_context: &C,
+        allocator: &Allocator,
         textures: &mut Textures<vk::DescriptorSet>,
     ) -> Result<Self, Box<dyn Error>> {
         let lenna_bytes = include_bytes!("../assets/images/Lenna.jpg");
@@ -133,17 +131,11 @@ impl Lenna {
         let (width, height) = image.dimensions();
         let data = image.into_rgba8();
 
-        let memory_properties = unsafe {
-            vk_context
-                .instance()
-                .get_physical_device_memory_properties(vk_context.physical_device())
-        };
-
         let texture = Texture::from_rgba8(
             vk_context.device(),
+            allocator,
             vk_context.queue(),
             vk_context.command_pool(),
-            memory_properties,
             width,
             height,
             &data,
@@ -179,11 +171,10 @@ impl Lenna {
         Image::new(self.texture_id, self.size).build(ui);
     }
 
-    fn destroy<C: RendererVkContext>(&mut self, context: &C) {
+    fn destroy(&mut self, device: &ash::Device, allocator: &Allocator) {
         unsafe {
-            let device = context.device();
             device.destroy_descriptor_pool(self.descriptor_pool, None);
-            self.texture.destroy(device);
+            self.texture.destroy(device, allocator);
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
     }
@@ -194,9 +185,9 @@ impl App for CustomTexturesApp {
         unsafe {
             let device = context.device();
             device.destroy_descriptor_pool(self.descriptor_pool, None);
-            self.my_texture.destroy(device);
+            self.my_texture.destroy(device, &self.allocator);
             if let Some(lenna) = &mut self.lenna {
-                lenna.destroy(context);
+                lenna.destroy(device, &self.allocator);
             }
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }

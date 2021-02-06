@@ -73,3 +73,6 @@ mod renderer;
 
 pub use error::*;
 pub use renderer::*;
+
+#[cfg(feature = "vma")]
+extern crate vk_mem;
