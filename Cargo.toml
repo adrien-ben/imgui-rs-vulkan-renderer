@@ -20,12 +20,12 @@ exclude = [
 log = "0.4"
 imgui = "^0.7"
 ash = ">=0.29"
-ultraviolet = "0.7"
+ultraviolet = "0.8"
 
 [dev-dependencies]
 simple_logger = "1.11"
 winit = "0.24"
 imgui-winit-support = "^0.7"
-ash = "0.31"
-ash-window = "0.5"
+ash = "0.32"
+ash-window = "0.6"
 image = "0.23"

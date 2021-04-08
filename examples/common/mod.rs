@@ -1,6 +1,6 @@
 use ash::{
     extensions::{
-        ext::DebugReport,
+        ext::DebugUtils,
         khr::{Surface, Swapchain as SwapchainLoader},
     },
     version::{DeviceV1_0, EntryV1_0, InstanceV1_0},
@@ -13,7 +13,7 @@ use std::{
     error::Error,
     ffi::{CStr, CString},
     marker::PhantomData,
-    os::raw::{c_char, c_void},
+    os::raw::c_void,
     time::Instant,
 };
 use winit::{
@@ -350,8 +350,8 @@ impl<A: App> System<A> {
 pub struct VulkanContext {
     _entry: Entry,
     instance: Instance,
-    debug_report: DebugReport,
-    debug_report_callback: vk::DebugReportCallbackEXT,
+    debug_utils: DebugUtils,
+    debug_utils_messenger: vk::DebugUtilsMessengerEXT,
     surface: Surface,
     surface_khr: vk::SurfaceKHR,
     physical_device: vk::PhysicalDevice,
@@ -366,8 +366,8 @@ pub struct VulkanContext {
 impl VulkanContext {
     pub fn new(window: &Window, name: &str) -> Result<Self, Box<dyn Error>> {
         // Vulkan instance
-        let entry = Entry::new()?;
-        let (instance, debug_report, debug_report_callback) =
+        let entry = unsafe { Entry::new()? };
+        let (instance, debug_utils, debug_utils_messenger) =
             create_vulkan_instance(&entry, window, name)?;
 
         // Vulkan surface
@@ -402,8 +402,8 @@ impl VulkanContext {
         Ok(Self {
             _entry: entry,
             instance,
-            debug_report,
-            debug_report_callback,
+            debug_utils,
+            debug_utils_messenger,
             surface,
             surface_khr,
             physical_device,
@@ -445,8 +445,8 @@ impl Drop for VulkanContext {
             self.device.destroy_command_pool(self.command_pool, None);
             self.device.destroy_device(None);
             self.surface.destroy_surface(self.surface_khr, None);
-            self.debug_report
-                .destroy_debug_report_callback(self.debug_report_callback, None);
+            self.debug_utils
+                .destroy_debug_utils_messenger(self.debug_utils_messenger, None);
             self.instance.destroy_instance(None);
         }
     }
@@ -549,7 +549,7 @@ fn create_vulkan_instance(
     entry: &Entry,
     window: &Window,
     title: &str,
-) -> Result<(Instance, DebugReport, vk::DebugReportCallbackEXT), Box<dyn Error>> {
+) -> Result<(Instance, DebugUtils, vk::DebugUtilsMessengerEXT), Box<dyn Error>> {
     log::debug!("Creating vulkan instance");
     // Vulkan instance
     let app_name = CString::new(title)?;
@@ -566,7 +566,7 @@ fn create_vulkan_instance(
         .iter()
         .map(|ext| ext.as_ptr())
         .collect::<Vec<_>>();
-    extension_names.push(DebugReport::name().as_ptr());
+    extension_names.push(DebugUtils::name().as_ptr());
 
     let instance_create_info = vk::InstanceCreateInfo::builder()
         .application_info(&app_info)
@@ -575,36 +575,32 @@ fn create_vulkan_instance(
     let instance = unsafe { entry.create_instance(&instance_create_info, None)? };
 
     // Vulkan debug report
-    let create_info = vk::DebugReportCallbackCreateInfoEXT::builder()
-        .flags(vk::DebugReportFlagsEXT::all())
-        .pfn_callback(Some(vulkan_debug_callback));
-    let debug_report = DebugReport::new(entry, &instance);
-    let debug_report_callback =
-        unsafe { debug_report.create_debug_report_callback(&create_info, None)? };
+    let create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
+        .flags(vk::DebugUtilsMessengerCreateFlagsEXT::all())
+        .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
+        .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
+        .pfn_user_callback(Some(vulkan_debug_callback));
+    let debug_utils = DebugUtils::new(entry, &instance);
+    let debug_utils_messenger =
+        unsafe { debug_utils.create_debug_utils_messenger(&create_info, None)? };
 
-    Ok((instance, debug_report, debug_report_callback))
+    Ok((instance, debug_utils, debug_utils_messenger))
 }
 
 unsafe extern "system" fn vulkan_debug_callback(
-    flag: vk::DebugReportFlagsEXT,
-    typ: vk::DebugReportObjectTypeEXT,
-    _: u64,
-    _: usize,
-    _: i32,
-    _: *const c_char,
-    p_message: *const c_char,
+    flag: vk::DebugUtilsMessageSeverityFlagsEXT,
+    typ: vk::DebugUtilsMessageTypeFlagsEXT,
+    p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
     _: *mut c_void,
-) -> u32 {
-    if flag == vk::DebugReportFlagsEXT::DEBUG {
-        log::debug!("{:?} - {:?}", typ, CStr::from_ptr(p_message));
-    } else if flag == vk::DebugReportFlagsEXT::INFORMATION {
-        log::info!("{:?} - {:?}", typ, CStr::from_ptr(p_message));
-    } else if flag == vk::DebugReportFlagsEXT::WARNING {
-        log::warn!("{:?} - {:?}", typ, CStr::from_ptr(p_message));
-    } else if flag == vk::DebugReportFlagsEXT::PERFORMANCE_WARNING {
-        log::warn!("{:?} - {:?}", typ, CStr::from_ptr(p_message));
-    } else {
-        log::error!("{:?} - {:?}", typ, CStr::from_ptr(p_message));
+) -> vk::Bool32 {
+    use vk::DebugUtilsMessageSeverityFlagsEXT as Flag;
+
+    let message = CStr::from_ptr((*p_callback_data).p_message);
+    match flag {
+        Flag::VERBOSE => log::debug!("{:?} - {:?}", typ, message),
+        Flag::INFO => log::info!("{:?} - {:?}", typ, message),
+        Flag::WARNING => log::warn!("{:?} - {:?}", typ, message),
+        _ => log::error!("{:?} - {:?}", typ, message),
     }
     vk::FALSE
 }
