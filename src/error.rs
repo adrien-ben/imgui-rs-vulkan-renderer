@@ -7,6 +7,9 @@ use std::{error::Error, fmt, io};
 pub enum RendererError {
     /// Errors coming from calls to Vulkan functions.
     Vulkan(vk::Result),
+    /// Errors coming from calls to vk-mem functions.
+    #[cfg(feature = "vkmem")]
+    VkMem(vk_mem::Error),
     /// Io errors.
     Io(io::Error),
     /// Initialization errors.
@@ -22,6 +25,8 @@ impl fmt::Display for RendererError {
         use RendererError::*;
         match self {
             Vulkan(error) => write!(f, "A Vulkan error occured: {}", error),
+            #[cfg(feature = "vkmem")]
+            VkMem(error) => write!(f, "A vk-mem error occured: {}", error),
             Io(error) => write!(f, "An io error occured: {}", error),
             Init(message) => write!(
                 f,
@@ -39,6 +44,8 @@ impl Error for RendererError {
         use RendererError::*;
         match self {
             Vulkan(error) => Some(error),
+            #[cfg(feature = "vkmem")]
+            VkMem(error) => Some(error),
             Io(error) => Some(error),
             Init(..) | BadTexture(..) | Destroyed => None,
         }
@@ -49,6 +56,14 @@ impl Error for RendererError {
 impl From<vk::Result> for RendererError {
     fn from(error: vk::Result) -> RendererError {
         RendererError::Vulkan(error)
+    }
+}
+
+#[cfg(feature = "vkmem")]
+#[doc(hidden)]
+impl From<vk_mem::Error> for RendererError {
+    fn from(error: vk_mem::Error) -> RendererError {
+        RendererError::VkMem(error)
     }
 }
 
