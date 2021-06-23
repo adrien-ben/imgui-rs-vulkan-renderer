@@ -21,6 +21,10 @@ log = "0.4"
 imgui = "^0.7"
 ash = ">=0.29"
 ultraviolet = "0.8"
+vk-mem = {version = "0.2", optional = true}
+
+[features]
+vkmem = ["vk-mem"]
 
 [dev-dependencies]
 simple_logger = "1.11"
@@ -29,3 +33,4 @@ imgui-winit-support = "^0.7"
 ash = "0.32"
 ash-window = "0.6"
 image = "0.23"
+imgui-rs-vulkan-renderer = { path = ".", features = ["vkmem"]}

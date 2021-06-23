@@ -37,6 +37,14 @@
 //!
 //! You need to implement that trait that will be used to access Vulkan resources such as the instance and device.
 //!
+//! ## vk-mem support
+//!
+//! The [vk-mem-rs][vk-mem-rs] is now supported via the `vkmem` feature.
+//!
+//! When enabled you'll need to implement `RendererVkContext::vk_mem_allocator` to return a reference
+//! to a `vk_mem::Allocator`. Then call `Renderer::with_vk_mem_allocator` instead of `Renderer::new`
+//! to create a Renderer.
+//!
 //! ## Examples
 //!
 //! You can run a set of examples by running the following command:
@@ -66,6 +74,7 @@
 //!
 //! [imgui-rs]: https://github.com/Gekkio/imgui-rs
 //! [ash]: https://github.com/MaikKlein/ash
+//! [vk-mem-rs]: https://github.com/gwihlidal/vk-mem-rs
 //! [example]: https://github.com/adrien-ben/imgui-rs-vulkan-renderer/blob/master/examples/common/mod.rs
 
 mod error;
