@@ -1,3 +1,5 @@
+mod vulkan;
+
 use ash::{
     extensions::{
         ext::DebugUtils,
@@ -17,6 +19,7 @@ use std::{
     time::Instant,
 };
 use vk_mem::{AllocatorCreateFlags, AllocatorCreateInfo};
+pub use vulkan::*;
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},

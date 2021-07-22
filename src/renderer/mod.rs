@@ -8,7 +8,7 @@ use mesh::*;
 use ultraviolet::projection::orthographic_vk;
 use vulkan::*;
 
-pub use self::allocator::Allocator;
+use self::allocator::Allocator;
 
 /// Convenient return type for function that can return a [`RendererError`].
 ///

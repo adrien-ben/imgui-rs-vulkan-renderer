@@ -7,7 +7,7 @@ use crate::RendererResult;
 use ash::{version::DeviceV1_0, vk, Device};
 pub(crate) use buffer::*;
 use std::{ffi::CString, mem};
-pub use texture::*;
+pub(crate) use texture::*;
 
 /// Return a `&[u8]` for any sized object passed in.
 pub(crate) unsafe fn any_as_u8_slice<T: Sized>(any: &T) -> &[u8] {
@@ -256,8 +256,8 @@ pub fn create_vulkan_descriptor_set(
 mod buffer {
 
     use crate::{
-        renderer::allocator::{AllocatorTrait, Memory},
-        Allocator, RendererResult, RendererVkContext,
+        renderer::allocator::{Allocator, AllocatorTrait, Memory},
+        RendererResult, RendererVkContext,
     };
     use ash::vk;
     use std::mem;

@@ -6,9 +6,9 @@ use crate::{RendererResult, RendererVkContext};
 use ash::version::DeviceV1_0;
 use ash::vk;
 
-pub use self::default::DefaultAllocator;
+use self::default::DefaultAllocator;
 #[cfg(feature = "vkmem")]
-pub use self::vkmem::VkMemAllocator;
+use self::vkmem::VkMemAllocator;
 
 /// Abstraction over memory used by Vulkan resources.
 pub enum Memory {
