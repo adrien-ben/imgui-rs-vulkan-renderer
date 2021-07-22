@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0
+
+- Add [vk-mem-rs](https://github.com/gwihlidal/vk-mem-rs) support.
+- Add internals previously exposed for examples.
+
 ## 0.7.0
 
 - Bump imgui-rs to 0.7

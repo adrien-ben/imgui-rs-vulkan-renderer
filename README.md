@@ -7,7 +7,7 @@
 
 A Vulkan renderer for [imgui-rs][imgui-rs] using [Ash][ash].
 
-![screenshot](Capture.PNG)
+![screenshot](capture.png)
 
 ## How it works
 
