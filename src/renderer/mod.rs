@@ -1,14 +1,14 @@
+mod allocator;
 pub mod vulkan;
 
 use crate::RendererError;
-use ash::{
-    version::{DeviceV1_0, InstanceV1_0},
-    vk, Device, Instance,
-};
+use ash::{version::DeviceV1_0, vk, Device, Instance};
 use imgui::{Context, DrawCmd, DrawCmdParams, DrawData, TextureId, Textures};
 use mesh::*;
 use ultraviolet::projection::orthographic_vk;
 use vulkan::*;
+
+use self::allocator::Allocator;
 
 /// Convenient return type for function that can return a [`RendererError`].
 ///
@@ -40,6 +40,12 @@ pub trait RendererVkContext {
     ///
     /// The pool will be used to allocate command buffers to upload textures to the gpu.
     fn command_pool(&self) -> vk::CommandPool;
+
+    /// Return a reference to a vk-mem Allocator.
+    ///
+    /// The allocator will be used to allocate images and buffers.
+    #[cfg(feature = "vkmem")]
+    fn vk_mem_allocator(&self) -> &vk_mem::Allocator;
 }
 
 /// Vulkan renderer for imgui.
@@ -57,6 +63,7 @@ pub trait RendererVkContext {
 /// [`destroy`]: #method.destroy
 /// [`RendererVkContext`]: trait.RendererVkContext.html
 pub struct Renderer {
+    allocator: Allocator,
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
     descriptor_set_layout: vk::DescriptorSetLayout,
@@ -95,6 +102,57 @@ impl Renderer {
         render_pass: vk::RenderPass,
         imgui: &mut Context,
     ) -> RendererResult<Self> {
+        Self::from_allocator(
+            vk_context,
+            Allocator::defaut(),
+            in_flight_frames,
+            render_pass,
+            imgui,
+        )
+    }
+
+    /// Initialize and return a new instance of the renderer.
+    ///
+    /// At initialization all Vulkan resources are initialized and font texture is created and
+    /// uploaded to the gpu. Vertex and index buffers are not created yet.
+    ///
+    /// # Arguments
+    ///
+    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `in_flight_frames` - The number of in flight frames of the application.
+    /// * `render_pass` - The render pass used to render the gui.
+    /// * `imgui` - The imgui context.
+    ///
+    /// # Errors
+    ///
+    /// * [`RendererError`] - If the number of in flight frame in incorrect.
+    /// * [`RendererError`] - If any Vulkan or io error is encountered during initialization.
+    ///
+    /// [`RendererVkContext`]: trait.RendererVkContext.html
+    /// [`RendererError`]: enum.RendererError.html
+    #[cfg(feature = "vkmem")]
+    pub fn with_vk_mem_allocator<C: RendererVkContext>(
+        vk_context: &C,
+        in_flight_frames: usize,
+        render_pass: vk::RenderPass,
+        imgui: &mut Context,
+    ) -> RendererResult<Self> {
+        Self::from_allocator(
+            vk_context,
+            Allocator::vk_mem(),
+            in_flight_frames,
+            render_pass,
+            imgui,
+        )
+    }
+
+    fn from_allocator<C: RendererVkContext>(
+        vk_context: &C,
+        allocator: Allocator,
+        in_flight_frames: usize,
+        render_pass: vk::RenderPass,
+        imgui: &mut Context,
+    ) -> RendererResult<Self> {
         if in_flight_frames == 0 {
             return Err(RendererError::Init(String::from(
                 "'in_flight_frames' parameter should be at least one",
@@ -113,17 +171,10 @@ impl Renderer {
         let fonts_texture = {
             let mut fonts = imgui.fonts();
             let atlas_texture = fonts.build_rgba32_texture();
-            let memory_properties = unsafe {
-                vk_context
-                    .instance()
-                    .get_physical_device_memory_properties(vk_context.physical_device())
-            };
 
             Texture::from_rgba8(
-                vk_context.device(),
-                vk_context.queue(),
-                vk_context.command_pool(),
-                memory_properties,
+                vk_context,
+                &allocator,
                 atlas_texture.width,
                 atlas_texture.height,
                 &atlas_texture.data,
@@ -149,6 +200,7 @@ impl Renderer {
         let textures = Textures::new();
 
         Ok(Self {
+            allocator,
             pipeline,
             pipeline_layout,
             descriptor_set_layout,
@@ -261,12 +313,16 @@ impl Renderer {
         }
 
         if self.frames.is_none() {
-            self.frames
-                .replace(Frames::new(vk_context, draw_data, self.in_flight_frames)?);
+            self.frames.replace(Frames::new(
+                vk_context,
+                &self.allocator,
+                draw_data,
+                self.in_flight_frames,
+            )?);
         }
 
         let mesh = self.frames.as_mut().unwrap().next();
-        mesh.update(vk_context, draw_data)?;
+        mesh.update(vk_context, &self.allocator, draw_data)?;
 
         unsafe {
             vk_context.device().cmd_bind_pipeline(
@@ -423,12 +479,12 @@ impl Renderer {
         unsafe {
             let device = context.device();
             if let Some(mut frames) = self.frames.take() {
-                frames.destroy(device);
+                frames.destroy(context, &self.allocator)?;
             }
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_pool(self.descriptor_pool, None);
-            self.fonts_texture.destroy(device);
+            self.fonts_texture.destroy(context, &self.allocator)?;
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
         self.destroyed = true;
@@ -447,11 +503,12 @@ struct Frames {
 impl Frames {
     fn new<C: RendererVkContext>(
         vk_context: &C,
+        allocator: &Allocator,
         draw_data: &DrawData,
         count: usize,
     ) -> RendererResult<Self> {
         let meshes = (0..count)
-            .map(|_| Mesh::new(vk_context, draw_data))
+            .map(|_| Mesh::new(vk_context, allocator, draw_data))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
             index: 0,
@@ -466,36 +523,42 @@ impl Frames {
         result
     }
 
-    fn destroy(&mut self, device: &Device) {
-        self.meshes.iter_mut().for_each(|m| m.destroy(device));
+    fn destroy<C: RendererVkContext>(
+        &mut self,
+        vk_context: &C,
+        allocator: &Allocator,
+    ) -> RendererResult<()> {
+        for mesh in self.meshes.iter_mut() {
+            mesh.destroy(vk_context, allocator)?;
+        }
         self.meshes.clear();
+        Ok(())
     }
 }
 
 mod mesh {
 
+    use super::allocator::{Allocator, AllocatorTrait, Memory};
     use super::{vulkan::*, RendererVkContext};
     use crate::RendererResult;
-    use ash::{
-        version::{DeviceV1_0, InstanceV1_0},
-        vk, Device,
-    };
+    use ash::vk;
     use imgui::{DrawData, DrawVert};
     use std::mem::size_of;
 
     /// Vertex and index buffer resources for one frame in flight.
     pub struct Mesh {
         pub vertices: vk::Buffer,
-        vertices_mem: vk::DeviceMemory,
+        vertices_mem: Memory,
         vertex_count: usize,
         pub indices: vk::Buffer,
-        indices_mem: vk::DeviceMemory,
+        indices_mem: Memory,
         index_count: usize,
     }
 
     impl Mesh {
         pub fn new<C: RendererVkContext>(
             vk_context: &C,
+            allocator: &Allocator,
             draw_data: &DrawData,
         ) -> RendererResult<Self> {
             let vertices = create_vertices(draw_data);
@@ -504,24 +567,19 @@ mod mesh {
             let index_count = indices.len();
 
             // Create a vertex buffer
-            let memory_properties = unsafe {
-                vk_context
-                    .instance()
-                    .get_physical_device_memory_properties(vk_context.physical_device())
-            };
             let (vertices, vertices_mem) = create_and_fill_buffer(
+                vk_context,
+                allocator,
                 &vertices,
-                vk_context.device(),
                 vk::BufferUsageFlags::VERTEX_BUFFER,
-                memory_properties,
             )?;
 
             // Create an index buffer
             let (indices, indices_mem) = create_and_fill_buffer(
+                vk_context,
+                allocator,
                 &indices,
-                vk_context.device(),
                 vk::BufferUsageFlags::INDEX_BUFFER,
-                memory_properties,
             )?;
 
             Ok(Mesh {
@@ -537,70 +595,73 @@ mod mesh {
         pub fn update<C: RendererVkContext>(
             &mut self,
             vk_context: &C,
+            allocator: &Allocator,
             draw_data: &DrawData,
         ) -> RendererResult<()> {
-            let memory_properties = unsafe {
-                vk_context
-                    .instance()
-                    .get_physical_device_memory_properties(vk_context.physical_device())
-            };
-
             let vertices = create_vertices(draw_data);
             if draw_data.total_vtx_count as usize > self.vertex_count {
                 log::trace!("Resizing vertex buffers");
-                self.destroy_vertices(vk_context.device());
+                self.destroy_vertices(vk_context, allocator)?;
                 let vertex_count = vertices.len();
                 let size = vertex_count * size_of::<DrawVert>();
-                let (vertices, vertices_mem) = create_buffer(
+                let (vertices, vertices_mem) = allocator.create_buffer(
+                    vk_context,
                     size,
-                    vk_context.device(),
                     vk::BufferUsageFlags::VERTEX_BUFFER,
-                    memory_properties,
                 )?;
 
                 self.vertices = vertices;
                 self.vertices_mem = vertices_mem;
                 self.vertex_count = vertex_count;
             }
-            update_buffer_content(vk_context.device(), self.vertices_mem, &vertices)?;
+            allocator.update_buffer(vk_context, &self.vertices_mem, &vertices)?;
 
             let indices = create_indices(draw_data);
             if draw_data.total_idx_count as usize > self.index_count {
                 log::trace!("Resizing index buffers");
-                self.destroy_indices(vk_context.device());
+                self.destroy_indices(vk_context, allocator)?;
                 let index_count = indices.len();
                 let size = index_count * size_of::<u16>();
-                let (indices, indices_mem) = create_buffer(
+                let (indices, indices_mem) = allocator.create_buffer(
+                    vk_context,
                     size,
-                    vk_context.device(),
                     vk::BufferUsageFlags::INDEX_BUFFER,
-                    memory_properties,
                 )?;
                 self.indices = indices;
                 self.indices_mem = indices_mem;
                 self.index_count = index_count;
             }
-            update_buffer_content(vk_context.device(), self.indices_mem, &indices)?;
+            allocator.update_buffer(vk_context, &self.indices_mem, &indices)?;
 
             Ok(())
         }
 
-        pub fn destroy(&mut self, device: &Device) {
-            self.destroy_indices(device);
-            self.destroy_vertices(device);
+        pub fn destroy<C: RendererVkContext>(
+            &mut self,
+            vk_context: &C,
+            allocator: &Allocator,
+        ) -> RendererResult<()> {
+            self.destroy_indices(vk_context, allocator)?;
+            self.destroy_vertices(vk_context, allocator)?;
+            Ok(())
         }
 
-        fn destroy_vertices(&mut self, device: &Device) {
-            unsafe {
-                device.destroy_buffer(self.vertices, None);
-                device.free_memory(self.vertices_mem, None);
-            }
+        fn destroy_vertices<C: RendererVkContext>(
+            &mut self,
+            vk_context: &C,
+            allocator: &Allocator,
+        ) -> RendererResult<()> {
+            allocator.destroy_buffer(vk_context, self.vertices, &self.vertices_mem)?;
+            Ok(())
         }
-        fn destroy_indices(&mut self, device: &Device) {
-            unsafe {
-                device.destroy_buffer(self.indices, None);
-                device.free_memory(self.indices_mem, None);
-            }
+
+        fn destroy_indices<C: RendererVkContext>(
+            &mut self,
+            vk_context: &C,
+            allocator: &Allocator,
+        ) -> RendererResult<()> {
+            allocator.destroy_buffer(vk_context, self.indices, &self.indices_mem)?;
+            Ok(())
         }
     }
 
