@@ -5,7 +5,6 @@ use ash::{
         ext::DebugUtils,
         khr::{Surface, Swapchain as SwapchainLoader},
     },
-    version::{DeviceV1_0, EntryV1_0, InstanceV1_0},
     vk, Device, Entry, Instance,
 };
 use imgui::*;
@@ -18,7 +17,6 @@ use std::{
     os::raw::c_void,
     time::Instant,
 };
-use vk_mem::{AllocatorCreateFlags, AllocatorCreateInfo};
 pub use vulkan::*;
 use winit::{
     dpi::PhysicalSize,
@@ -126,8 +124,7 @@ impl<A: App> System<A> {
         imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
         platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Rounded);
 
-        let renderer =
-            Renderer::with_vk_mem_allocator(&vulkan_context, 1, swapchain.render_pass, &mut imgui)?;
+        let renderer = Renderer::new(&vulkan_context, 1, swapchain.render_pass, &mut imgui)?;
 
         Ok(Self {
             phantom_data: PhantomData,
@@ -366,7 +363,6 @@ pub struct VulkanContext {
     graphics_queue: vk::Queue,
     present_queue: vk::Queue,
     command_pool: vk::CommandPool,
-    vk_mem_allocator: vk_mem::Allocator,
 }
 
 impl VulkanContext {
@@ -405,20 +401,6 @@ impl VulkanContext {
             unsafe { device.create_command_pool(&command_pool_info, None)? }
         };
 
-        // VkMem allocator
-        let vk_mem_allocator = {
-            let allocator_create_info = AllocatorCreateInfo {
-                physical_device: physical_device,
-                device: device.clone(),
-                instance: instance.clone(),
-                flags: AllocatorCreateFlags::NONE,
-                preferred_large_heap_block_size: 0,
-                frame_in_use_count: 0,
-                heap_size_limits: None,
-            };
-            vk_mem::Allocator::new(&allocator_create_info)?
-        };
-
         Ok(Self {
             _entry: entry,
             instance,
@@ -433,7 +415,6 @@ impl VulkanContext {
             graphics_queue,
             present_queue,
             command_pool,
-            vk_mem_allocator,
         })
     }
 }
@@ -458,16 +439,11 @@ impl RendererVkContext for VulkanContext {
     fn command_pool(&self) -> vk::CommandPool {
         self.command_pool
     }
-
-    fn vk_mem_allocator(&self) -> &vk_mem::Allocator {
-        &self.vk_mem_allocator
-    }
 }
 
 impl Drop for VulkanContext {
     fn drop(&mut self) {
         unsafe {
-            self.vk_mem_allocator.destroy();
             self.device.destroy_command_pool(self.command_pool, None);
             self.device.destroy_device(None);
             self.surface.destroy_surface(self.surface_khr, None);
@@ -582,10 +558,10 @@ fn create_vulkan_instance(
     let engine_name = CString::new("No Engine")?;
     let app_info = vk::ApplicationInfo::builder()
         .application_name(app_name.as_c_str())
-        .application_version(vk::make_version(0, 1, 0))
+        .application_version(vk::make_api_version(0, 0, 1, 0))
         .engine_name(engine_name.as_c_str())
-        .engine_version(vk::make_version(0, 1, 0))
-        .api_version(vk::make_version(1, 0, 0));
+        .engine_version(vk::make_api_version(0, 0, 1, 0))
+        .api_version(vk::make_api_version(0, 1, 0, 0));
 
     let extension_names = ash_window::enumerate_required_extensions(window)?;
     let mut extension_names = extension_names

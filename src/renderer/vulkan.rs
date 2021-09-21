@@ -4,7 +4,7 @@
 //! are exposed since they might help users create descriptors sets when using the custom textures.
 
 use crate::RendererResult;
-use ash::{version::DeviceV1_0, vk, Device};
+use ash::{vk, Device};
 pub(crate) use buffer::*;
 use std::{ffi::CString, mem};
 pub(crate) use texture::*;
@@ -285,7 +285,7 @@ mod texture {
     use crate::renderer::allocator::{Allocator, AllocatorTrait, Memory};
     use crate::{RendererResult, RendererVkContext};
     use ash::vk;
-    use ash::{version::DeviceV1_0, Device};
+    use ash::Device;
 
     /// Helper struct representing a sampled texture.
     pub struct Texture {
