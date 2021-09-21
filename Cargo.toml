@@ -7,7 +7,7 @@ homepage = "https://github.com/adrien-ben/imgui-rs-vulkan-renderer"
 repository = "https://github.com/adrien-ben/imgui-rs-vulkan-renderer"
 documentation = "https://docs.rs/imgui-rs-vulkan-renderer"
 license = "MIT"
-version = "0.8.0"
+version = "0.8.1"
 authors = ["Adrien Bennadji <adrien.bennadji@live.fr>"]
 edition = "2018"
 
@@ -19,9 +19,13 @@ exclude = [
 [dependencies]
 log = "0.4"
 imgui = "^0.7"
-ash = ">=0.29"
+ash = ">=0.29, <0.33"
 ultraviolet = "0.8"
 vk-mem = { version = "0.2", optional = true }
+
+[patch.crates-io]
+# Version setting an upper bound to ash version
+vk-mem = { git = "https://github.com/Chris--B/vk-mem-rs" }
 
 [features]
 vkmem = ["vk-mem"]

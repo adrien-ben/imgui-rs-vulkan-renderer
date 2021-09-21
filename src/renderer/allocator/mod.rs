@@ -72,7 +72,7 @@ pub trait AllocatorTrait {
             Memory::VkMemAllocation(allocation) => {
                 vk_context
                     .vk_mem_allocator()
-                    .destroy_buffer(buffer, &allocation)?;
+                    .destroy_buffer(buffer, &allocation);
             }
         }
 
@@ -102,7 +102,7 @@ pub trait AllocatorTrait {
             Memory::VkMemAllocation(allocation) => {
                 vk_context
                     .vk_mem_allocator()
-                    .destroy_image(image, &allocation)?;
+                    .destroy_image(image, &allocation);
             }
         }
 
@@ -141,7 +141,7 @@ pub trait AllocatorTrait {
                     let mut align =
                         ash::util::Align::new(data_ptr, std::mem::align_of::<T>() as _, size);
                     align.copy_from_slice(&data);
-                    allocator.unmap_memory(allocation)?;
+                    allocator.unmap_memory(allocation);
                 }
             }
         };

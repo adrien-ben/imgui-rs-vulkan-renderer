@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1
+
+- Fix vk-mem-rs compatibility with ash 0.33 (by setting an upper bound)
+
 ## 0.8.0
 
 - Add [vk-mem-rs](https://github.com/gwihlidal/vk-mem-rs) support.
