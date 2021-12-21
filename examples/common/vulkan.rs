@@ -3,7 +3,7 @@ pub use texture::*;
 
 mod buffer {
 
-    use ash::{version::DeviceV1_0, vk, Device};
+    use ash::{vk, Device};
     use imgui_rs_vulkan_renderer::RendererResult;
     use std::mem;
 
@@ -88,7 +88,7 @@ mod texture {
 
     use super::buffer::*;
     use ash::vk;
-    use ash::{version::DeviceV1_0, Device};
+    use ash::Device;
     use imgui_rs_vulkan_renderer::RendererResult;
 
     /// Helper struct representing a sampled texture.

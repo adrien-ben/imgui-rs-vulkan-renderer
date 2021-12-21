@@ -10,12 +10,12 @@ const APP_NAME: &str = "hello world";
 fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init()?;
     System::new(APP_NAME)?.run((), |_, ui, _| {
-        Window::new(im_str!("Hello world"))
+        Window::new("Hello world")
             .size([300.0, 100.0], Condition::FirstUseEver)
             .build(ui, || {
-                ui.text(im_str!("Hello world!"));
-                ui.text(im_str!("こんにちは世界！"));
-                ui.text(im_str!("This...is...imgui-rs!"));
+                ui.text("Hello world!");
+                ui.text("こんにちは世界！");
+                ui.text("This...is...imgui-rs!");
                 ui.separator();
                 let mouse_pos = ui.io().mouse_pos;
                 ui.text(format!(

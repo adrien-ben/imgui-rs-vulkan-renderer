@@ -5,7 +5,6 @@ use ash::{
         ext::DebugUtils,
         khr::{Surface, Swapchain as SwapchainLoader},
     },
-    version::{DeviceV1_0, EntryV1_0, InstanceV1_0},
     vk, Device, Entry, Instance,
 };
 use imgui::*;
@@ -369,7 +368,7 @@ pub struct VulkanContext {
 impl VulkanContext {
     pub fn new(window: &Window, name: &str) -> Result<Self, Box<dyn Error>> {
         // Vulkan instance
-        let entry = unsafe { Entry::new()? };
+        let entry = Entry::new();
         let (instance, debug_utils, debug_utils_messenger) =
             create_vulkan_instance(&entry, window, name)?;
 
@@ -559,10 +558,10 @@ fn create_vulkan_instance(
     let engine_name = CString::new("No Engine")?;
     let app_info = vk::ApplicationInfo::builder()
         .application_name(app_name.as_c_str())
-        .application_version(vk::make_version(0, 1, 0))
+        .application_version(vk::make_api_version(0, 0, 1, 0))
         .engine_name(engine_name.as_c_str())
-        .engine_version(vk::make_version(0, 1, 0))
-        .api_version(vk::make_version(1, 0, 0));
+        .engine_version(vk::make_api_version(0, 0, 1, 0))
+        .api_version(vk::make_api_version(0, 1, 0, 0));
 
     let extension_names = ash_window::enumerate_required_extensions(window)?;
     let mut extension_names = extension_names
@@ -579,9 +578,18 @@ fn create_vulkan_instance(
 
     // Vulkan debug report
     let create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
-        .flags(vk::DebugUtilsMessengerCreateFlagsEXT::all())
-        .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
-        .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
+        .flags(vk::DebugUtilsMessengerCreateFlagsEXT::empty())
+        .message_severity(
+            vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+                | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
+                | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
+        )
+        .message_type(
+            vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
+                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
+        )
         .pfn_user_callback(Some(vulkan_debug_callback));
     let debug_utils = DebugUtils::new(entry, &instance);
     let debug_utils_messenger =

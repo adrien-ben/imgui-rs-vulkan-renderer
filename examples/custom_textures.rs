@@ -1,9 +1,6 @@
 mod common;
 
-use ash::{
-    version::{DeviceV1_0, InstanceV1_0},
-    vk,
-};
+use ash::vk;
 use common::*;
 use imgui::*;
 use imgui_rs_vulkan_renderer::vulkan::*;
@@ -105,10 +102,10 @@ impl CustomTexturesApp {
     }
 
     fn show_textures(&self, ui: &Ui) {
-        Window::new(im_str!("Hello textures"))
+        Window::new("Hello textures")
             .size([400.0, 600.0], Condition::FirstUseEver)
             .build(ui, || {
-                ui.text(im_str!("Hello textures!"));
+                ui.text("Hello textures!");
                 if let Some(my_texture_id) = self.my_texture_id {
                     ui.text("Some generated texture");
                     Image::new(my_texture_id, [100.0, 100.0]).build(ui);

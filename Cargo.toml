@@ -18,14 +18,14 @@ exclude = [
 
 [dependencies]
 log = "0.4"
-imgui = "^0.7"
-ash = ">=0.29, <0.33"
+imgui = "^0.8"
+ash = "0.34"
 ultraviolet = "0.8" 
 
 [dev-dependencies]
 simple_logger = "1.11"
 winit = "0.25.0"
-imgui-winit-support = { version = "^0.7", default-features = false, features = ["winit-25"] }
-ash = "0.32"
-ash-window = "0.6"
+imgui-winit-support = { version = "^0.8", default-features = false, features = ["winit-25"] }
+ash = "0.34"
+ash-window = "0.8"
 image = "0.23"

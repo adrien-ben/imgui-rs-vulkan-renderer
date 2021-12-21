@@ -10,7 +10,7 @@ const APP_NAME: &str = "progress bar";
 fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init()?;
     System::new(APP_NAME)?.run((), |run, ui, _| {
-        let w = Window::new(im_str!("Progress bar"))
+        let w = Window::new("Progress bar")
             .opened(run)
             .position([20.0, 20.0], Condition::Appearing)
             .size([700.0, 200.0], Condition::Appearing);
@@ -24,9 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             ui.separator();
             ui.text("This progress bar uses overlay text:");
-            ProgressBar::new(0.8)
-                .overlay_text(im_str!("Lorem ipsum"))
-                .build(ui);
+            ProgressBar::new(0.8).overlay_text("Lorem ipsum").build(ui);
         });
     })?;
 

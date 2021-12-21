@@ -2,7 +2,7 @@ mod allocator;
 pub mod vulkan;
 
 use crate::RendererError;
-use ash::{version::DeviceV1_0, vk, Device, Instance};
+use ash::{vk, Device, Instance};
 use imgui::{Context, DrawCmd, DrawCmdParams, DrawData, TextureId, Textures};
 use mesh::*;
 use ultraviolet::projection::orthographic_vk;
