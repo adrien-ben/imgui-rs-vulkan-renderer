@@ -40,12 +40,6 @@ pub trait RendererVkContext {
     ///
     /// The pool will be used to allocate command buffers to upload textures to the gpu.
     fn command_pool(&self) -> vk::CommandPool;
-
-    /// Return a reference to a vk-mem Allocator.
-    ///
-    /// The allocator will be used to allocate images and buffers.
-    #[cfg(feature = "vkmem")]
-    fn vk_mem_allocator(&self) -> &vk_mem::Allocator;
 }
 
 /// Vulkan renderer for imgui.
@@ -111,41 +105,6 @@ impl Renderer {
         )
     }
 
-    /// Initialize and return a new instance of the renderer.
-    ///
-    /// At initialization all Vulkan resources are initialized and font texture is created and
-    /// uploaded to the gpu. Vertex and index buffers are not created yet.
-    ///
-    /// # Arguments
-    ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
-    /// * `in_flight_frames` - The number of in flight frames of the application.
-    /// * `render_pass` - The render pass used to render the gui.
-    /// * `imgui` - The imgui context.
-    ///
-    /// # Errors
-    ///
-    /// * [`RendererError`] - If the number of in flight frame in incorrect.
-    /// * [`RendererError`] - If any Vulkan or io error is encountered during initialization.
-    ///
-    /// [`RendererVkContext`]: trait.RendererVkContext.html
-    /// [`RendererError`]: enum.RendererError.html
-    #[cfg(feature = "vkmem")]
-    pub fn with_vk_mem_allocator<C: RendererVkContext>(
-        vk_context: &C,
-        in_flight_frames: usize,
-        render_pass: vk::RenderPass,
-        imgui: &mut Context,
-    ) -> RendererResult<Self> {
-        Self::from_allocator(
-            vk_context,
-            Allocator::vk_mem(),
-            in_flight_frames,
-            render_pass,
-            imgui,
-        )
-    }
-
     fn from_allocator<C: RendererVkContext>(
         vk_context: &C,
         allocator: Allocator,
@@ -177,7 +136,7 @@ impl Renderer {
                 &allocator,
                 atlas_texture.width,
                 atlas_texture.height,
-                &atlas_texture.data,
+                atlas_texture.data,
             )?
         };
 

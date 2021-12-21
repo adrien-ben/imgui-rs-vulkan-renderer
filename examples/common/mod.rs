@@ -18,7 +18,6 @@ use std::{
     os::raw::c_void,
     time::Instant,
 };
-use vk_mem::{AllocatorCreateFlags, AllocatorCreateInfo};
 pub use vulkan::*;
 use winit::{
     dpi::PhysicalSize,
@@ -126,8 +125,7 @@ impl<A: App> System<A> {
         imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
         platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Rounded);
 
-        let renderer =
-            Renderer::with_vk_mem_allocator(&vulkan_context, 1, swapchain.render_pass, &mut imgui)?;
+        let renderer = Renderer::new(&vulkan_context, 1, swapchain.render_pass, &mut imgui)?;
 
         Ok(Self {
             phantom_data: PhantomData,
@@ -366,7 +364,6 @@ pub struct VulkanContext {
     graphics_queue: vk::Queue,
     present_queue: vk::Queue,
     command_pool: vk::CommandPool,
-    vk_mem_allocator: vk_mem::Allocator,
 }
 
 impl VulkanContext {
@@ -405,20 +402,6 @@ impl VulkanContext {
             unsafe { device.create_command_pool(&command_pool_info, None)? }
         };
 
-        // VkMem allocator
-        let vk_mem_allocator = {
-            let allocator_create_info = AllocatorCreateInfo {
-                physical_device: physical_device,
-                device: device.clone(),
-                instance: instance.clone(),
-                flags: AllocatorCreateFlags::NONE,
-                preferred_large_heap_block_size: 0,
-                frame_in_use_count: 0,
-                heap_size_limits: None,
-            };
-            vk_mem::Allocator::new(&allocator_create_info)?
-        };
-
         Ok(Self {
             _entry: entry,
             instance,
@@ -433,7 +416,6 @@ impl VulkanContext {
             graphics_queue,
             present_queue,
             command_pool,
-            vk_mem_allocator,
         })
     }
 }
@@ -458,16 +440,11 @@ impl RendererVkContext for VulkanContext {
     fn command_pool(&self) -> vk::CommandPool {
         self.command_pool
     }
-
-    fn vk_mem_allocator(&self) -> &vk_mem::Allocator {
-        &self.vk_mem_allocator
-    }
 }
 
 impl Drop for VulkanContext {
     fn drop(&mut self) {
         unsafe {
-            self.vk_mem_allocator.destroy();
             self.device.destroy_command_pool(self.command_pool, None);
             self.device.destroy_device(None);
             self.surface.destroy_surface(self.surface_khr, None);

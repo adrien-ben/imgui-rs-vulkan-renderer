@@ -7,6 +7,7 @@ mod buffer {
     use imgui_rs_vulkan_renderer::RendererResult;
     use std::mem;
 
+    #[allow(dead_code)]
     pub fn create_and_fill_buffer<T: Copy>(
         data: &[T],
         device: &Device,
@@ -91,6 +92,7 @@ mod texture {
     use imgui_rs_vulkan_renderer::RendererResult;
 
     /// Helper struct representing a sampled texture.
+    #[allow(dead_code)]
     pub struct Texture {
         pub image: vk::Image,
         image_mem: vk::DeviceMemory,
@@ -112,6 +114,7 @@ mod texture {
         /// * `width` - The width of the image.
         /// * `height` - The height of the image.
         /// * `data` - The image data.
+        #[allow(dead_code)]
         pub fn from_rgba8(
             device: &Device,
             transfer_queue: vk::Queue,
@@ -313,6 +316,7 @@ mod texture {
         }
 
         /// Free texture's resources.
+        #[allow(dead_code)]
         pub fn destroy(&mut self, device: &Device) {
             unsafe {
                 device.destroy_sampler(self.sampler, None);

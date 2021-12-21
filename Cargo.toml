@@ -20,15 +20,7 @@ exclude = [
 log = "0.4"
 imgui = "^0.7"
 ash = ">=0.29, <0.33"
-ultraviolet = "0.8"
-vk-mem = { version = "0.2", optional = true }
-
-[patch.crates-io]
-# Version setting an upper bound to ash version
-vk-mem = { git = "https://github.com/Chris--B/vk-mem-rs" }
-
-[features]
-vkmem = ["vk-mem"]
+ultraviolet = "0.8" 
 
 [dev-dependencies]
 simple_logger = "1.11"
@@ -37,4 +29,3 @@ imgui-winit-support = { version = "^0.7", default-features = false, features = [
 ash = "0.32"
 ash-window = "0.6"
 image = "0.23"
-imgui-rs-vulkan-renderer = { path = ".", features = ["vkmem"] }

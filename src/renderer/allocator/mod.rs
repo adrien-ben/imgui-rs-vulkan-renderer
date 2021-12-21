@@ -1,20 +1,14 @@
 mod default;
-#[cfg(feature = "vkmem")]
-mod vkmem;
 
 use crate::{RendererResult, RendererVkContext};
 use ash::version::DeviceV1_0;
 use ash::vk;
 
 use self::default::DefaultAllocator;
-#[cfg(feature = "vkmem")]
-use self::vkmem::VkMemAllocator;
 
 /// Abstraction over memory used by Vulkan resources.
 pub enum Memory {
     DeviceMemory(vk::DeviceMemory),
-    #[cfg(feature = "vkmem")]
-    VkMemAllocation(vk_mem::Allocation),
 }
 
 /// Base allocator trait for all implementations.
@@ -68,12 +62,6 @@ pub trait AllocatorTrait {
                 device.destroy_buffer(buffer, None);
                 device.free_memory(*memory, None);
             },
-            #[cfg(feature = "vkmem")]
-            Memory::VkMemAllocation(allocation) => {
-                vk_context
-                    .vk_mem_allocator()
-                    .destroy_buffer(buffer, &allocation);
-            }
         }
 
         Ok(())
@@ -98,12 +86,6 @@ pub trait AllocatorTrait {
                 device.destroy_image(image, None);
                 device.free_memory(*memory, None);
             },
-            #[cfg(feature = "vkmem")]
-            Memory::VkMemAllocation(allocation) => {
-                vk_context
-                    .vk_mem_allocator()
-                    .destroy_image(image, &allocation);
-            }
         }
 
         Ok(())
@@ -131,17 +113,8 @@ pub trait AllocatorTrait {
                         device.map_memory(*memory, 0, size, vk::MemoryMapFlags::empty())?;
                     let mut align =
                         ash::util::Align::new(data_ptr, std::mem::align_of::<T>() as _, size);
-                    align.copy_from_slice(&data);
+                    align.copy_from_slice(data);
                     device.unmap_memory(*memory);
-                }
-                #[cfg(feature = "vkmem")]
-                Memory::VkMemAllocation(allocation) => {
-                    let allocator = vk_context.vk_mem_allocator();
-                    let data_ptr = allocator.map_memory(allocation)? as *mut std::ffi::c_void;
-                    let mut align =
-                        ash::util::Align::new(data_ptr, std::mem::align_of::<T>() as _, size);
-                    align.copy_from_slice(&data);
-                    allocator.unmap_memory(allocation);
                 }
             }
         };
@@ -156,23 +129,14 @@ pub trait AllocatorTrait {
 /// # Variants
 ///
 /// * `Default` - Default allocator.
-/// * `VkMem` - Allocator using vk-mem-rs crate.
 pub enum Allocator {
     Default(DefaultAllocator),
-    #[cfg(feature = "vkmem")]
-    VkMem(VkMemAllocator),
 }
 
 impl Allocator {
     /// Get a default allocator.
     pub fn defaut() -> Self {
         Self::Default(DefaultAllocator)
-    }
-
-    /// Get a vk-mem allocator.
-    #[cfg(feature = "vkmem")]
-    pub fn vk_mem() -> Self {
-        Self::VkMem(VkMemAllocator)
     }
 }
 
@@ -185,8 +149,6 @@ impl AllocatorTrait for Allocator {
     ) -> RendererResult<(vk::Buffer, Memory)> {
         match self {
             Self::Default(allocator) => allocator.create_buffer(vk_context, size, usage),
-            #[cfg(feature = "vkmem")]
-            Self::VkMem(allocator) => allocator.create_buffer(vk_context, size, usage),
         }
     }
 
@@ -198,8 +160,6 @@ impl AllocatorTrait for Allocator {
     ) -> RendererResult<(vk::Image, Memory)> {
         match self {
             Self::Default(allocator) => allocator.create_image(vk_context, width, height),
-            #[cfg(feature = "vkmem")]
-            Self::VkMem(allocator) => allocator.create_image(vk_context, width, height),
         }
     }
 }
