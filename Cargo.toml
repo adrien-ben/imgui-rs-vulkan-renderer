@@ -17,6 +17,7 @@ exclude = [
 ]
 
 [dependencies]
+thiserror = "1.0"
 log = "0.4"
 imgui = "^0.8"
 ash = "0.34"
