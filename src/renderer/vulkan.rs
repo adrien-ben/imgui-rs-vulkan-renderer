@@ -262,24 +262,27 @@ mod buffer {
 
     use crate::{
         renderer::allocator::{Allocator, AllocatorTrait, Memory},
-        RendererResult, RendererVkContext,
+        RendererResult,
     };
     use ash::vk;
+    use ash::{Device, Instance};
     use std::mem;
 
-    pub fn create_and_fill_buffer<T, C>(
-        vk_context: &C,
+    pub fn create_and_fill_buffer<T>(
+        instance: &Instance,
+        device: &Device,
+        physical_device: vk::PhysicalDevice,
         allocator: &Allocator,
         data: &[T],
         usage: vk::BufferUsageFlags,
     ) -> RendererResult<(vk::Buffer, Memory)>
     where
         T: Copy,
-        C: RendererVkContext,
     {
         let size = data.len() * mem::size_of::<T>();
-        let (buffer, memory) = allocator.create_buffer(vk_context, size, usage)?;
-        allocator.update_buffer(vk_context, &memory, data)?;
+        let (buffer, memory) =
+            allocator.create_buffer(instance, device, physical_device, size, usage)?;
+        allocator.update_buffer(device, &memory, data)?;
         Ok((buffer, memory))
     }
 }
@@ -288,9 +291,9 @@ mod texture {
 
     use super::buffer::*;
     use crate::renderer::allocator::{Allocator, AllocatorTrait, Memory};
-    use crate::{RendererResult, RendererVkContext};
+    use crate::RendererResult;
     use ash::vk;
-    use ash::Device;
+    use ash::{Device, Instance};
 
     /// Helper struct representing a sampled texture.
     pub struct Texture {
@@ -314,44 +317,57 @@ mod texture {
         /// * `width` - The width of the image.
         /// * `height` - The height of the image.
         /// * `data` - The image data.
-        pub fn from_rgba8<C: RendererVkContext>(
-            vk_context: &C,
+        pub fn from_rgba8(
+            instance: &Instance,
+            device: &Device,
+            physical_device: vk::PhysicalDevice,
+            queue: vk::Queue,
+            command_pool: vk::CommandPool,
             allocator: &Allocator,
             width: u32,
             height: u32,
             data: &[u8],
         ) -> RendererResult<Self> {
-            let device = vk_context.device();
-            let (texture, staging_buff, staging_mem) = execute_one_time_commands(
-                device,
-                vk_context.queue(),
-                vk_context.command_pool(),
-                |buffer| Self::cmd_from_rgba(vk_context, allocator, buffer, width, height, data),
-            )??;
+            let (texture, staging_buff, staging_mem) =
+                execute_one_time_commands(device, queue, command_pool, |buffer| {
+                    Self::cmd_from_rgba(
+                        instance,
+                        device,
+                        physical_device,
+                        allocator,
+                        buffer,
+                        width,
+                        height,
+                        data,
+                    )
+                })??;
 
-            allocator.destroy_buffer(vk_context, staging_buff, &staging_mem)?;
+            allocator.destroy_buffer(device, staging_buff, &staging_mem)?;
 
             Ok(texture)
         }
 
-        fn cmd_from_rgba<C: RendererVkContext>(
-            vk_context: &C,
+        fn cmd_from_rgba(
+            instance: &Instance,
+            device: &Device,
+            physical_device: vk::PhysicalDevice,
             allocator: &Allocator,
             command_buffer: vk::CommandBuffer,
             width: u32,
             height: u32,
             data: &[u8],
         ) -> RendererResult<(Self, vk::Buffer, Memory)> {
-            let device = vk_context.device();
-
             let (buffer, buffer_mem) = create_and_fill_buffer(
-                vk_context,
+                instance,
+                device,
+                physical_device,
                 allocator,
                 data,
                 vk::BufferUsageFlags::TRANSFER_SRC,
             )?;
 
-            let (image, image_mem) = allocator.create_image(vk_context, width, height)?;
+            let (image, image_mem) =
+                allocator.create_image(instance, device, physical_device, width, height)?;
 
             // Transition the image layout and copy the buffer into the image
             // and transition the layout again to be readable from fragment shader.
@@ -477,16 +493,11 @@ mod texture {
         }
 
         /// Free texture's resources.
-        pub fn destroy<C: RendererVkContext>(
-            &mut self,
-            vk_context: &C,
-            allocator: &Allocator,
-        ) -> RendererResult<()> {
-            let device = vk_context.device();
+        pub fn destroy(&mut self, device: &Device, allocator: &Allocator) -> RendererResult<()> {
             unsafe {
                 device.destroy_sampler(self.sampler, None);
                 device.destroy_image_view(self.image_view, None);
-                allocator.destroy_image(vk_context, self.image, &self.image_mem)?;
+                allocator.destroy_image(device, self.image, &self.image_mem)?;
             }
             Ok(())
         }

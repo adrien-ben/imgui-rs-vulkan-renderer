@@ -1,7 +1,7 @@
 mod default;
 
-use crate::{RendererResult, RendererVkContext};
-use ash::vk;
+use crate::RendererResult;
+use ash::{vk, Device, Instance};
 
 use self::default::DefaultAllocator;
 
@@ -19,9 +19,11 @@ pub trait AllocatorTrait {
     /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
     /// * `size` - The size in bytes of the buffer.
     /// * `usage` - The buffer usage flags.
-    fn create_buffer<C: RendererVkContext>(
+    fn create_buffer(
         &self,
-        vk_context: &C,
+        instance: &Instance,
+        device: &Device,
+        physical_device: vk::PhysicalDevice,
         size: usize,
         usage: vk::BufferUsageFlags,
     ) -> RendererResult<(vk::Buffer, Memory)>;
@@ -35,9 +37,11 @@ pub trait AllocatorTrait {
     /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
     /// * `width` - The width of the image to create.
     /// * `height` - The height of the image to create.
-    fn create_image<C: RendererVkContext>(
+    fn create_image(
         &self,
-        vk_context: &C,
+        instance: &Instance,
+        device: &Device,
+        physical_device: vk::PhysicalDevice,
         width: u32,
         height: u32,
     ) -> RendererResult<(vk::Image, Memory)>;
@@ -49,15 +53,14 @@ pub trait AllocatorTrait {
     /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
     /// * `buffer` - The buffer to destroy.
     /// * `memory` - The buffer memory to destroy.
-    fn destroy_buffer<C: RendererVkContext>(
+    fn destroy_buffer(
         &self,
-        vk_context: &C,
+        device: &Device,
         buffer: vk::Buffer,
         memory: &Memory,
     ) -> RendererResult<()> {
         match memory {
             Memory::DeviceMemory(memory) => unsafe {
-                let device = vk_context.device();
                 device.destroy_buffer(buffer, None);
                 device.free_memory(*memory, None);
             },
@@ -73,15 +76,14 @@ pub trait AllocatorTrait {
     /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
     /// * `image` - The image to destroy.
     /// * `memory` - The image memory to destroy.
-    fn destroy_image<C: RendererVkContext>(
+    fn destroy_image(
         &self,
-        vk_context: &C,
+        device: &Device,
         image: vk::Image,
         memory: &Memory,
     ) -> RendererResult<()> {
         match memory {
             Memory::DeviceMemory(memory) => unsafe {
-                let device = vk_context.device();
                 device.destroy_image(image, None);
                 device.free_memory(*memory, None);
             },
@@ -97,9 +99,9 @@ pub trait AllocatorTrait {
     /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
     /// * `buffer_memory` - The memory of the buffer to update.
     /// * `data` - The data to update the buffer with.
-    fn update_buffer<C: RendererVkContext, T: Copy>(
+    fn update_buffer<T: Copy>(
         &self,
-        vk_context: &C,
+        device: &Device,
         buffer_memory: &Memory,
         data: &[T],
     ) -> RendererResult<()> {
@@ -107,7 +109,6 @@ pub trait AllocatorTrait {
         unsafe {
             match buffer_memory {
                 Memory::DeviceMemory(memory) => {
-                    let device = vk_context.device();
                     let data_ptr =
                         device.map_memory(*memory, 0, size, vk::MemoryMapFlags::empty())?;
                     let mut align =
@@ -140,25 +141,33 @@ impl Allocator {
 }
 
 impl AllocatorTrait for Allocator {
-    fn create_buffer<C: RendererVkContext>(
+    fn create_buffer(
         &self,
-        vk_context: &C,
+        instance: &Instance,
+        device: &Device,
+        physical_device: vk::PhysicalDevice,
         size: usize,
         usage: vk::BufferUsageFlags,
     ) -> RendererResult<(vk::Buffer, Memory)> {
         match self {
-            Self::Default(allocator) => allocator.create_buffer(vk_context, size, usage),
+            Self::Default(allocator) => {
+                allocator.create_buffer(instance, device, physical_device, size, usage)
+            }
         }
     }
 
-    fn create_image<C: RendererVkContext>(
+    fn create_image(
         &self,
-        vk_context: &C,
+        instance: &Instance,
+        device: &Device,
+        physical_device: vk::PhysicalDevice,
         width: u32,
         height: u32,
     ) -> RendererResult<(vk::Image, Memory)> {
         match self {
-            Self::Default(allocator) => allocator.create_image(vk_context, width, height),
+            Self::Default(allocator) => {
+                allocator.create_image(instance, device, physical_device, width, height)
+            }
         }
     }
 }

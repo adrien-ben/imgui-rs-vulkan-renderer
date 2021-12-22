@@ -124,7 +124,16 @@ impl<A: App> System<A> {
         imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
         platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Rounded);
 
-        let renderer = Renderer::new(&vulkan_context, 1, swapchain.render_pass, &mut imgui)?;
+        let renderer = Renderer::new(
+            vulkan_context.instance.clone(),
+            vulkan_context.device.clone(),
+            vulkan_context.physical_device,
+            vulkan_context.graphics_queue,
+            vulkan_context.command_pool,
+            1,
+            swapchain.render_pass,
+            &mut imgui,
+        )?;
 
         Ok(Self {
             phantom_data: PhantomData,
@@ -190,7 +199,7 @@ impl<A: App> System<A> {
                                 .recreate(&vulkan_context)
                                 .expect("Failed to recreate swapchain");
                             renderer
-                                .set_render_pass(&vulkan_context, swapchain.render_pass)
+                                .set_render_pass(swapchain.render_pass)
                                 .expect("Failed to rebuild renderer pipeline");
                             dirty_swapchain = false;
                         } else {
@@ -249,7 +258,8 @@ impl<A: App> System<A> {
 
                     // Re-record commands to draw geometry
                     record_command_buffers(
-                        &vulkan_context,
+                        &vulkan_context.device,
+                        vulkan_context.command_pool,
                         command_buffer,
                         swapchain.framebuffers[image_index as usize],
                         swapchain.render_pass,
@@ -321,9 +331,7 @@ impl<A: App> System<A> {
 
                         app.destroy(&vulkan_context);
 
-                        renderer
-                            .destroy(&vulkan_context)
-                            .expect("Failed to destroy renderer.");
+                        renderer.destroy().expect("Failed to destroy renderer.");
                         vulkan_context.device.destroy_fence(fence, None);
                         vulkan_context
                             .device
@@ -351,18 +359,18 @@ impl<A: App> System<A> {
 
 pub struct VulkanContext {
     _entry: Entry,
-    instance: Instance,
+    pub instance: Instance,
     debug_utils: DebugUtils,
     debug_utils_messenger: vk::DebugUtilsMessengerEXT,
     surface: Surface,
     surface_khr: vk::SurfaceKHR,
-    physical_device: vk::PhysicalDevice,
+    pub physical_device: vk::PhysicalDevice,
     graphics_q_index: u32,
     present_q_index: u32,
-    device: Device,
-    graphics_queue: vk::Queue,
+    pub device: Device,
+    pub graphics_queue: vk::Queue,
     present_queue: vk::Queue,
-    command_pool: vk::CommandPool,
+    pub command_pool: vk::CommandPool,
 }
 
 impl VulkanContext {
@@ -416,28 +424,6 @@ impl VulkanContext {
             present_queue,
             command_pool,
         })
-    }
-}
-
-impl RendererVkContext for VulkanContext {
-    fn instance(&self) -> &Instance {
-        &self.instance
-    }
-
-    fn physical_device(&self) -> vk::PhysicalDevice {
-        self.physical_device
-    }
-
-    fn device(&self) -> &Device {
-        &self.device
-    }
-
-    fn queue(&self) -> vk::Queue {
-        self.graphics_queue
-    }
-
-    fn command_pool(&self) -> vk::CommandPool {
-        self.command_pool
     }
 }
 
@@ -949,8 +935,9 @@ fn create_vulkan_framebuffers(
         .collect::<Result<Vec<_>, _>>()?)
 }
 
-fn record_command_buffers<C: RendererVkContext>(
-    vk_context: &C,
+fn record_command_buffers(
+    device: &Device,
+    command_pool: vk::CommandPool,
     command_buffer: vk::CommandBuffer,
     framebuffer: vk::Framebuffer,
     render_pass: vk::RenderPass,
@@ -958,20 +945,11 @@ fn record_command_buffers<C: RendererVkContext>(
     renderer: &mut Renderer,
     draw_data: &DrawData,
 ) -> Result<(), Box<dyn Error>> {
-    unsafe {
-        vk_context.device().reset_command_pool(
-            vk_context.command_pool(),
-            vk::CommandPoolResetFlags::empty(),
-        )?
-    };
+    unsafe { device.reset_command_pool(command_pool, vk::CommandPoolResetFlags::empty())? };
 
     let command_buffer_begin_info =
         vk::CommandBufferBeginInfo::builder().flags(vk::CommandBufferUsageFlags::SIMULTANEOUS_USE);
-    unsafe {
-        vk_context
-            .device()
-            .begin_command_buffer(command_buffer, &command_buffer_begin_info)?
-    };
+    unsafe { device.begin_command_buffer(command_buffer, &command_buffer_begin_info)? };
 
     let render_pass_begin_info = vk::RenderPassBeginInfo::builder()
         .render_pass(render_pass)
@@ -987,18 +965,18 @@ fn record_command_buffers<C: RendererVkContext>(
         }]);
 
     unsafe {
-        vk_context.device().cmd_begin_render_pass(
+        device.cmd_begin_render_pass(
             command_buffer,
             &render_pass_begin_info,
             vk::SubpassContents::INLINE,
         )
     };
 
-    renderer.cmd_draw(vk_context, command_buffer, draw_data)?;
+    renderer.cmd_draw(command_buffer, draw_data)?;
 
-    unsafe { vk_context.device().cmd_end_render_pass(command_buffer) };
+    unsafe { device.cmd_end_render_pass(command_buffer) };
 
-    unsafe { vk_context.device().end_command_buffer(command_buffer)? };
+    unsafe { device.end_command_buffer(command_buffer)? };
 
     Ok(())
 }

@@ -15,33 +15,6 @@ use self::allocator::Allocator;
 /// [`RendererError`]: enum.RendererError.html
 pub type RendererResult<T> = Result<T, RendererError>;
 
-/// Trait providing access to the application's Vulkan context.
-pub trait RendererVkContext {
-    /// Return a reference to the Vulkan instance.
-    fn instance(&self) -> &Instance;
-
-    /// Return the Vulkan physical device.
-    fn physical_device(&self) -> vk::PhysicalDevice;
-
-    /// Return a reference to the Vulkan device.
-    fn device(&self) -> &Device;
-
-    /// Return a Vulkan queue.
-    ///
-    /// It will be used to submit commands during initialization to upload
-    /// data to the gpu. The type of queue must be supported by the following
-    /// commands:
-    ///
-    /// * [vkCmdCopyBufferToImage](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html)
-    /// * [vkCmdPipelineBarrier](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPipelineBarrier.html)
-    fn queue(&self) -> vk::Queue;
-
-    /// Return a Vulkan command pool.
-    ///
-    /// The pool will be used to allocate command buffers to upload textures to the gpu.
-    fn command_pool(&self) -> vk::CommandPool;
-}
-
 /// Vulkan renderer for imgui.
 ///
 /// It records rendering command to the provided command buffer at each call to [`cmd_draw`].
@@ -57,6 +30,9 @@ pub trait RendererVkContext {
 /// [`destroy`]: #method.destroy
 /// [`RendererVkContext`]: trait.RendererVkContext.html
 pub struct Renderer {
+    instance: Instance,
+    device: Device,
+    physical_device: vk::PhysicalDevice,
     allocator: Allocator,
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
@@ -90,14 +66,22 @@ impl Renderer {
     ///
     /// [`RendererVkContext`]: trait.RendererVkContext.html
     /// [`RendererError`]: enum.RendererError.html
-    pub fn new<C: RendererVkContext>(
-        vk_context: &C,
+    pub fn new(
+        instance: Instance,
+        device: Device,
+        physical_device: vk::PhysicalDevice,
+        queue: vk::Queue,
+        command_pool: vk::CommandPool,
         in_flight_frames: usize,
         render_pass: vk::RenderPass,
         imgui: &mut Context,
     ) -> RendererResult<Self> {
         Self::from_allocator(
-            vk_context,
+            instance,
+            device,
+            physical_device,
+            queue,
+            command_pool,
             Allocator::defaut(),
             in_flight_frames,
             render_pass,
@@ -105,8 +89,12 @@ impl Renderer {
         )
     }
 
-    fn from_allocator<C: RendererVkContext>(
-        vk_context: &C,
+    fn from_allocator(
+        instance: Instance,
+        device: Device,
+        physical_device: vk::PhysicalDevice,
+        queue: vk::Queue,
+        command_pool: vk::CommandPool,
         allocator: Allocator,
         in_flight_frames: usize,
         render_pass: vk::RenderPass,
@@ -119,12 +107,11 @@ impl Renderer {
         }
 
         // Descriptor set layout
-        let descriptor_set_layout = create_vulkan_descriptor_set_layout(vk_context.device())?;
+        let descriptor_set_layout = create_vulkan_descriptor_set_layout(&device)?;
 
         // Pipeline and layout
-        let pipeline_layout =
-            create_vulkan_pipeline_layout(vk_context.device(), descriptor_set_layout)?;
-        let pipeline = create_vulkan_pipeline(vk_context.device(), pipeline_layout, render_pass)?;
+        let pipeline_layout = create_vulkan_pipeline_layout(&device, descriptor_set_layout)?;
+        let pipeline = create_vulkan_pipeline(&device, pipeline_layout, render_pass)?;
 
         // Fonts texture
         let fonts_texture = {
@@ -132,7 +119,11 @@ impl Renderer {
             let atlas_texture = fonts.build_rgba32_texture();
 
             Texture::from_rgba8(
-                vk_context,
+                &instance,
+                &device,
+                physical_device,
+                queue,
+                command_pool,
                 &allocator,
                 atlas_texture.width,
                 atlas_texture.height,
@@ -144,11 +135,11 @@ impl Renderer {
         fonts.tex_id = TextureId::from(usize::MAX);
 
         // Descriptor pool
-        let descriptor_pool = create_vulkan_descriptor_pool(vk_context.device(), 1)?;
+        let descriptor_pool = create_vulkan_descriptor_pool(&device, 1)?;
 
         // Descriptor set
         let descriptor_set = create_vulkan_descriptor_set(
-            vk_context.device(),
+            &device,
             descriptor_set_layout,
             descriptor_pool,
             fonts_texture.image_view,
@@ -159,6 +150,9 @@ impl Renderer {
         let textures = Textures::new();
 
         Ok(Self {
+            instance,
+            device,
+            physical_device,
             allocator,
             pipeline,
             pipeline_layout,
@@ -192,18 +186,13 @@ impl Renderer {
     /// [`RendererVkContext`]: trait.RendererVkContext.html
     /// [`RendererError`]: enum.RendererError.html
     /// [`destroy`]: #method.destroy
-    pub fn set_render_pass<C: RendererVkContext>(
-        &mut self,
-        vk_context: &C,
-        render_pass: vk::RenderPass,
-    ) -> RendererResult<()> {
+    pub fn set_render_pass(&mut self, render_pass: vk::RenderPass) -> RendererResult<()> {
         if self.destroyed {
             return Err(RendererError::Destroyed);
         }
 
-        unsafe { vk_context.device().destroy_pipeline(self.pipeline, None) };
-        self.pipeline =
-            create_vulkan_pipeline(vk_context.device(), self.pipeline_layout, render_pass)?;
+        unsafe { self.device.destroy_pipeline(self.pipeline, None) };
+        self.pipeline = create_vulkan_pipeline(&self.device, self.pipeline_layout, render_pass)?;
         Ok(())
     }
 
@@ -257,9 +246,8 @@ impl Renderer {
     /// [`RendererVkContext`]: trait.RendererVkContext.html
     /// [`RendererError`]: enum.RendererError.html
     /// [`destroy`]: #method.destroy
-    pub fn cmd_draw<C: RendererVkContext>(
+    pub fn cmd_draw(
         &mut self,
-        vk_context: &C,
         command_buffer: vk::CommandBuffer,
         draw_data: &DrawData,
     ) -> RendererResult<()> {
@@ -273,7 +261,9 @@ impl Renderer {
 
         if self.frames.is_none() {
             self.frames.replace(Frames::new(
-                vk_context,
+                &self.instance,
+                &self.device,
+                self.physical_device,
                 &self.allocator,
                 draw_data,
                 self.in_flight_frames,
@@ -281,10 +271,16 @@ impl Renderer {
         }
 
         let mesh = self.frames.as_mut().unwrap().next();
-        mesh.update(vk_context, &self.allocator, draw_data)?;
+        mesh.update(
+            &self.instance,
+            &self.device,
+            self.physical_device,
+            &self.allocator,
+            draw_data,
+        )?;
 
         unsafe {
-            vk_context.device().cmd_bind_pipeline(
+            self.device.cmd_bind_pipeline(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
@@ -300,11 +296,7 @@ impl Renderer {
             ..Default::default()
         }];
 
-        unsafe {
-            vk_context
-                .device()
-                .cmd_set_viewport(command_buffer, 0, &viewports)
-        };
+        unsafe { self.device.cmd_set_viewport(command_buffer, 0, &viewports) };
 
         // Ortho projection
         let projection = orthographic_vk(
@@ -317,7 +309,7 @@ impl Renderer {
         );
         unsafe {
             let push = any_as_u8_slice(&projection);
-            vk_context.device().cmd_push_constants(
+            self.device.cmd_push_constants(
                 command_buffer,
                 self.pipeline_layout,
                 vk::ShaderStageFlags::VERTEX,
@@ -327,7 +319,7 @@ impl Renderer {
         };
 
         unsafe {
-            vk_context.device().cmd_bind_index_buffer(
+            self.device.cmd_bind_index_buffer(
                 command_buffer,
                 mesh.indices,
                 0,
@@ -336,8 +328,7 @@ impl Renderer {
         };
 
         unsafe {
-            vk_context
-                .device()
+            self.device
                 .cmd_bind_vertex_buffers(command_buffer, 0, &[mesh.vertices], &[0])
         };
 
@@ -375,15 +366,13 @@ impl Renderer {
                                     height: clip_h as _,
                                 },
                             }];
-                            vk_context
-                                .device()
-                                .cmd_set_scissor(command_buffer, 0, &scissors);
+                            self.device.cmd_set_scissor(command_buffer, 0, &scissors);
                         }
 
                         if Some(texture_id) != current_texture_id {
                             let descriptor_set = self.lookup_descriptor_set(texture_id)?;
                             unsafe {
-                                vk_context.device().cmd_bind_descriptor_sets(
+                                self.device.cmd_bind_descriptor_sets(
                                     command_buffer,
                                     vk::PipelineBindPoint::GRAPHICS,
                                     self.pipeline_layout,
@@ -396,7 +385,7 @@ impl Renderer {
                         }
 
                         unsafe {
-                            vk_context.device().cmd_draw_indexed(
+                            self.device.cmd_draw_indexed(
                                 command_buffer,
                                 count as _,
                                 1,
@@ -430,20 +419,21 @@ impl Renderer {
     /// [`destroy`]: #method.destroy
     /// [`RendererVkContext`]: trait.RendererVkContext.html
     /// [`RendererError`]: enum.RendererError.html
-    pub fn destroy<C: RendererVkContext>(&mut self, context: &C) -> RendererResult<()> {
+    pub fn destroy(&mut self) -> RendererResult<()> {
         if self.destroyed {
             return Err(RendererError::Destroyed);
         }
 
+        let device = &self.device;
+
         unsafe {
-            let device = context.device();
             if let Some(mut frames) = self.frames.take() {
-                frames.destroy(context, &self.allocator)?;
+                frames.destroy(device, &self.allocator)?;
             }
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_pool(self.descriptor_pool, None);
-            self.fonts_texture.destroy(context, &self.allocator)?;
+            self.fonts_texture.destroy(device, &self.allocator)?;
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
         self.destroyed = true;
@@ -460,14 +450,16 @@ struct Frames {
 }
 
 impl Frames {
-    fn new<C: RendererVkContext>(
-        vk_context: &C,
+    fn new(
+        instance: &Instance,
+        device: &Device,
+        physical_device: vk::PhysicalDevice,
         allocator: &Allocator,
         draw_data: &DrawData,
         count: usize,
     ) -> RendererResult<Self> {
         let meshes = (0..count)
-            .map(|_| Mesh::new(vk_context, allocator, draw_data))
+            .map(|_| Mesh::new(instance, device, physical_device, allocator, draw_data))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
             index: 0,
@@ -482,13 +474,9 @@ impl Frames {
         result
     }
 
-    fn destroy<C: RendererVkContext>(
-        &mut self,
-        vk_context: &C,
-        allocator: &Allocator,
-    ) -> RendererResult<()> {
+    fn destroy(&mut self, device: &Device, allocator: &Allocator) -> RendererResult<()> {
         for mesh in self.meshes.iter_mut() {
-            mesh.destroy(vk_context, allocator)?;
+            mesh.destroy(device, allocator)?;
         }
         self.meshes.clear();
         Ok(())
@@ -498,9 +486,9 @@ impl Frames {
 mod mesh {
 
     use super::allocator::{Allocator, AllocatorTrait, Memory};
-    use super::{vulkan::*, RendererVkContext};
+    use super::vulkan::*;
     use crate::RendererResult;
-    use ash::vk;
+    use ash::{vk, Device, Instance};
     use imgui::{DrawData, DrawVert};
     use std::mem::size_of;
 
@@ -515,8 +503,10 @@ mod mesh {
     }
 
     impl Mesh {
-        pub fn new<C: RendererVkContext>(
-            vk_context: &C,
+        pub fn new(
+            instance: &Instance,
+            device: &Device,
+            physical_device: vk::PhysicalDevice,
             allocator: &Allocator,
             draw_data: &DrawData,
         ) -> RendererResult<Self> {
@@ -527,7 +517,9 @@ mod mesh {
 
             // Create a vertex buffer
             let (vertices, vertices_mem) = create_and_fill_buffer(
-                vk_context,
+                instance,
+                device,
+                physical_device,
                 allocator,
                 &vertices,
                 vk::BufferUsageFlags::VERTEX_BUFFER,
@@ -535,7 +527,9 @@ mod mesh {
 
             // Create an index buffer
             let (indices, indices_mem) = create_and_fill_buffer(
-                vk_context,
+                instance,
+                device,
+                physical_device,
                 allocator,
                 &indices,
                 vk::BufferUsageFlags::INDEX_BUFFER,
@@ -551,20 +545,24 @@ mod mesh {
             })
         }
 
-        pub fn update<C: RendererVkContext>(
+        pub fn update(
             &mut self,
-            vk_context: &C,
+            instance: &Instance,
+            device: &Device,
+            physical_device: vk::PhysicalDevice,
             allocator: &Allocator,
             draw_data: &DrawData,
         ) -> RendererResult<()> {
             let vertices = create_vertices(draw_data);
             if draw_data.total_vtx_count as usize > self.vertex_count {
                 log::trace!("Resizing vertex buffers");
-                self.destroy_vertices(vk_context, allocator)?;
+                self.destroy_vertices(device, allocator)?;
                 let vertex_count = vertices.len();
                 let size = vertex_count * size_of::<DrawVert>();
                 let (vertices, vertices_mem) = allocator.create_buffer(
-                    vk_context,
+                    instance,
+                    device,
+                    physical_device,
                     size,
                     vk::BufferUsageFlags::VERTEX_BUFFER,
                 )?;
@@ -573,16 +571,18 @@ mod mesh {
                 self.vertices_mem = vertices_mem;
                 self.vertex_count = vertex_count;
             }
-            allocator.update_buffer(vk_context, &self.vertices_mem, &vertices)?;
+            allocator.update_buffer(device, &self.vertices_mem, &vertices)?;
 
             let indices = create_indices(draw_data);
             if draw_data.total_idx_count as usize > self.index_count {
                 log::trace!("Resizing index buffers");
-                self.destroy_indices(vk_context, allocator)?;
+                self.destroy_indices(device, allocator)?;
                 let index_count = indices.len();
                 let size = index_count * size_of::<u16>();
                 let (indices, indices_mem) = allocator.create_buffer(
-                    vk_context,
+                    instance,
+                    device,
+                    physical_device,
                     size,
                     vk::BufferUsageFlags::INDEX_BUFFER,
                 )?;
@@ -590,36 +590,32 @@ mod mesh {
                 self.indices_mem = indices_mem;
                 self.index_count = index_count;
             }
-            allocator.update_buffer(vk_context, &self.indices_mem, &indices)?;
+            allocator.update_buffer(device, &self.indices_mem, &indices)?;
 
             Ok(())
         }
 
-        pub fn destroy<C: RendererVkContext>(
-            &mut self,
-            vk_context: &C,
-            allocator: &Allocator,
-        ) -> RendererResult<()> {
-            self.destroy_indices(vk_context, allocator)?;
-            self.destroy_vertices(vk_context, allocator)?;
+        pub fn destroy(&mut self, device: &Device, allocator: &Allocator) -> RendererResult<()> {
+            self.destroy_indices(device, allocator)?;
+            self.destroy_vertices(device, allocator)?;
             Ok(())
         }
 
-        fn destroy_vertices<C: RendererVkContext>(
+        fn destroy_vertices(
             &mut self,
-            vk_context: &C,
+            device: &Device,
             allocator: &Allocator,
         ) -> RendererResult<()> {
-            allocator.destroy_buffer(vk_context, self.vertices, &self.vertices_mem)?;
+            allocator.destroy_buffer(device, self.vertices, &self.vertices_mem)?;
             Ok(())
         }
 
-        fn destroy_indices<C: RendererVkContext>(
+        fn destroy_indices(
             &mut self,
-            vk_context: &C,
+            device: &Device,
             allocator: &Allocator,
         ) -> RendererResult<()> {
-            allocator.destroy_buffer(vk_context, self.indices, &self.indices_mem)?;
+            allocator.destroy_buffer(device, self.indices, &self.indices_mem)?;
             Ok(())
         }
     }

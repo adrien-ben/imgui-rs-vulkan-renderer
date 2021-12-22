@@ -1,10 +1,9 @@
 mod common;
 
-use ash::vk;
+use ash::{vk, Device, Instance};
 use common::*;
 use imgui::*;
 use imgui_rs_vulkan_renderer::vulkan::*;
-use imgui_rs_vulkan_renderer::RendererVkContext;
 
 use std::error::Error;
 
@@ -32,8 +31,12 @@ struct Lenna {
 }
 
 impl CustomTexturesApp {
-    fn new<C: RendererVkContext>(
-        vk_context: &C,
+    fn new(
+        instance: &Instance,
+        device: &Device,
+        physical_device: vk::PhysicalDevice,
+        queue: vk::Queue,
+        command_pool: vk::CommandPool,
         textures: &mut Textures<vk::DescriptorSet>,
     ) -> Self {
         const WIDTH: usize = 100;
@@ -52,16 +55,13 @@ impl CustomTexturesApp {
                 }
             }
 
-            let memory_properties = unsafe {
-                vk_context
-                    .instance()
-                    .get_physical_device_memory_properties(vk_context.physical_device())
-            };
+            let memory_properties =
+                unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
             Texture::from_rgba8(
-                vk_context.device(),
-                vk_context.queue(),
-                vk_context.command_pool(),
+                device,
+                queue,
+                command_pool,
                 memory_properties,
                 WIDTH as u32,
                 HEIGHT as u32,
@@ -70,13 +70,12 @@ impl CustomTexturesApp {
             .unwrap()
         };
 
-        let descriptor_set_layout =
-            create_vulkan_descriptor_set_layout(vk_context.device()).unwrap();
+        let descriptor_set_layout = create_vulkan_descriptor_set_layout(device).unwrap();
 
-        let descriptor_pool = create_vulkan_descriptor_pool(vk_context.device(), 1).unwrap();
+        let descriptor_pool = create_vulkan_descriptor_pool(device, 1).unwrap();
 
         let descriptor_set = create_vulkan_descriptor_set(
-            &vk_context.device(),
+            device,
             descriptor_set_layout,
             descriptor_pool,
             my_texture.image_view,
@@ -89,7 +88,17 @@ impl CustomTexturesApp {
         let my_texture_id = Some(texture_id);
 
         // Lenna
-        let lenna = Some(Lenna::new(vk_context, textures).unwrap());
+        let lenna = Some(
+            Lenna::new(
+                instance,
+                device,
+                physical_device,
+                queue,
+                command_pool,
+                textures,
+            )
+            .unwrap(),
+        );
 
         CustomTexturesApp {
             descriptor_set_layout,
@@ -120,8 +129,12 @@ impl CustomTexturesApp {
 }
 
 impl Lenna {
-    fn new<C: RendererVkContext>(
-        vk_context: &C,
+    fn new(
+        instance: &Instance,
+        device: &Device,
+        physical_device: vk::PhysicalDevice,
+        queue: vk::Queue,
+        command_pool: vk::CommandPool,
         textures: &mut Textures<vk::DescriptorSet>,
     ) -> Result<Self, Box<dyn Error>> {
         let lenna_bytes = include_bytes!("../assets/images/Lenna.jpg");
@@ -130,16 +143,13 @@ impl Lenna {
         let (width, height) = image.dimensions();
         let data = image.into_rgba8();
 
-        let memory_properties = unsafe {
-            vk_context
-                .instance()
-                .get_physical_device_memory_properties(vk_context.physical_device())
-        };
+        let memory_properties =
+            unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
         let texture = Texture::from_rgba8(
-            vk_context.device(),
-            vk_context.queue(),
-            vk_context.command_pool(),
+            device,
+            queue,
+            command_pool,
             memory_properties,
             width,
             height,
@@ -147,13 +157,12 @@ impl Lenna {
         )
         .unwrap();
 
-        let descriptor_set_layout =
-            create_vulkan_descriptor_set_layout(vk_context.device()).unwrap();
+        let descriptor_set_layout = create_vulkan_descriptor_set_layout(device).unwrap();
 
-        let descriptor_pool = create_vulkan_descriptor_pool(vk_context.device(), 1).unwrap();
+        let descriptor_pool = create_vulkan_descriptor_pool(device, 1).unwrap();
 
         let descriptor_set = create_vulkan_descriptor_set(
-            vk_context.device(),
+            device,
             descriptor_set_layout,
             descriptor_pool,
             texture.image_view,
@@ -176,9 +185,8 @@ impl Lenna {
         Image::new(self.texture_id, self.size).build(ui);
     }
 
-    fn destroy<C: RendererVkContext>(&mut self, context: &C) {
+    fn destroy(&mut self, device: &Device) {
         unsafe {
-            let device = context.device();
             device.destroy_descriptor_pool(self.descriptor_pool, None);
             self.texture.destroy(device);
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
@@ -189,11 +197,11 @@ impl Lenna {
 impl App for CustomTexturesApp {
     fn destroy(&mut self, context: &VulkanContext) {
         unsafe {
-            let device = context.device();
+            let device = &context.device;
             device.destroy_descriptor_pool(self.descriptor_pool, None);
             self.my_texture.destroy(device);
             if let Some(lenna) = &mut self.lenna {
-                lenna.destroy(context);
+                lenna.destroy(device);
             }
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
@@ -203,7 +211,14 @@ impl App for CustomTexturesApp {
 fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init()?;
     let mut system = System::new(APP_NAME)?;
-    let my_app = CustomTexturesApp::new(&system.vulkan_context, system.renderer.textures());
+    let my_app = CustomTexturesApp::new(
+        &system.vulkan_context.instance,
+        &system.vulkan_context.device,
+        system.vulkan_context.physical_device,
+        system.vulkan_context.graphics_queue,
+        system.vulkan_context.command_pool,
+        system.renderer.textures(),
+    );
     system.run(my_app, move |_, ui, app| {
         app.show_textures(ui);
     })?;

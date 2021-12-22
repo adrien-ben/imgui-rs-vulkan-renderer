@@ -1,5 +1,5 @@
-use crate::{RendererResult, RendererVkContext};
-use ash::vk;
+use crate::RendererResult;
+use ash::{vk, Device, Instance};
 
 use super::{AllocatorTrait, Memory};
 
@@ -25,25 +25,22 @@ impl DefaultAllocator {
 }
 
 impl AllocatorTrait for DefaultAllocator {
-    fn create_buffer<C: RendererVkContext>(
+    fn create_buffer(
         &self,
-        vk_context: &C,
+        instance: &Instance,
+        device: &Device,
+        physical_device: vk::PhysicalDevice,
         size: usize,
         usage: vk::BufferUsageFlags,
     ) -> RendererResult<(vk::Buffer, Memory)> {
-        let memory_properties = unsafe {
-            vk_context
-                .instance()
-                .get_physical_device_memory_properties(vk_context.physical_device())
-        };
+        let memory_properties =
+            unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
         let buffer_info = vk::BufferCreateInfo::builder()
             .size(size as _)
             .usage(usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .build();
-
-        let device = vk_context.device();
 
         let buffer = unsafe { device.create_buffer(&buffer_info, None)? };
 
@@ -63,9 +60,11 @@ impl AllocatorTrait for DefaultAllocator {
         Ok((buffer, Memory::DeviceMemory(memory)))
     }
 
-    fn create_image<C: RendererVkContext>(
+    fn create_image(
         &self,
-        vk_context: &C,
+        instance: &Instance,
+        device: &Device,
+        physical_device: vk::PhysicalDevice,
         width: u32,
         height: u32,
     ) -> RendererResult<(vk::Image, Memory)> {
@@ -88,14 +87,10 @@ impl AllocatorTrait for DefaultAllocator {
             .samples(vk::SampleCountFlags::TYPE_1)
             .flags(vk::ImageCreateFlags::empty());
 
-        let device = vk_context.device();
         let image = unsafe { device.create_image(&image_info, None)? };
         let mem_requirements = unsafe { device.get_image_memory_requirements(image) };
-        let memory_properties = unsafe {
-            vk_context
-                .instance()
-                .get_physical_device_memory_properties(vk_context.physical_device())
-        };
+        let memory_properties =
+            unsafe { instance.get_physical_device_memory_properties(physical_device) };
         let mem_type_index = Self::find_memory_type(
             mem_requirements,
             memory_properties,
