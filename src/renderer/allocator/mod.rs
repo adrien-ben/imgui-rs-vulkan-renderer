@@ -1,7 +1,7 @@
 mod default;
 
 use crate::RendererResult;
-use ash::{vk, Device, Instance};
+use ash::{vk, Device};
 
 use self::default::DefaultAllocator;
 
@@ -21,9 +21,7 @@ pub trait AllocatorTrait {
     /// * `usage` - The buffer usage flags.
     fn create_buffer(
         &self,
-        instance: &Instance,
         device: &Device,
-        physical_device: vk::PhysicalDevice,
         size: usize,
         usage: vk::BufferUsageFlags,
     ) -> RendererResult<(vk::Buffer, Memory)>;
@@ -39,9 +37,7 @@ pub trait AllocatorTrait {
     /// * `height` - The height of the image to create.
     fn create_image(
         &self,
-        instance: &Instance,
         device: &Device,
-        physical_device: vk::PhysicalDevice,
         width: u32,
         height: u32,
     ) -> RendererResult<(vk::Image, Memory)>;
@@ -135,39 +131,31 @@ pub enum Allocator {
 
 impl Allocator {
     /// Get a default allocator.
-    pub fn defaut() -> Self {
-        Self::Default(DefaultAllocator)
+    pub fn defaut(memory_properties: vk::PhysicalDeviceMemoryProperties) -> Self {
+        Self::Default(DefaultAllocator { memory_properties })
     }
 }
 
 impl AllocatorTrait for Allocator {
     fn create_buffer(
         &self,
-        instance: &Instance,
         device: &Device,
-        physical_device: vk::PhysicalDevice,
         size: usize,
         usage: vk::BufferUsageFlags,
     ) -> RendererResult<(vk::Buffer, Memory)> {
         match self {
-            Self::Default(allocator) => {
-                allocator.create_buffer(instance, device, physical_device, size, usage)
-            }
+            Self::Default(allocator) => allocator.create_buffer(device, size, usage),
         }
     }
 
     fn create_image(
         &self,
-        instance: &Instance,
         device: &Device,
-        physical_device: vk::PhysicalDevice,
         width: u32,
         height: u32,
     ) -> RendererResult<(vk::Image, Memory)> {
         match self {
-            Self::Default(allocator) => {
-                allocator.create_image(instance, device, physical_device, width, height)
-            }
+            Self::Default(allocator) => allocator.create_image(device, width, height),
         }
     }
 }

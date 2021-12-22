@@ -145,7 +145,12 @@ pub(crate) fn create_vulkan_pipeline(
         .alpha_to_one_enable(false);
 
     let color_blend_attachments = [vk::PipelineColorBlendAttachmentState::builder()
-        .color_write_mask(vk::ColorComponentFlags::R | vk::ColorComponentFlags::G | vk::ColorComponentFlags::B | vk::ColorComponentFlags::A)
+        .color_write_mask(
+            vk::ColorComponentFlags::R
+                | vk::ColorComponentFlags::G
+                | vk::ColorComponentFlags::B
+                | vk::ColorComponentFlags::A,
+        )
         .blend_enable(true)
         .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
         .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
@@ -260,13 +265,11 @@ mod buffer {
         RendererResult,
     };
     use ash::vk;
-    use ash::{Device, Instance};
+    use ash::Device;
     use std::mem;
 
     pub fn create_and_fill_buffer<T>(
-        instance: &Instance,
         device: &Device,
-        physical_device: vk::PhysicalDevice,
         allocator: &Allocator,
         data: &[T],
         usage: vk::BufferUsageFlags,
@@ -275,8 +278,7 @@ mod buffer {
         T: Copy,
     {
         let size = data.len() * mem::size_of::<T>();
-        let (buffer, memory) =
-            allocator.create_buffer(instance, device, physical_device, size, usage)?;
+        let (buffer, memory) = allocator.create_buffer(device, size, usage)?;
         allocator.update_buffer(device, &memory, data)?;
         Ok((buffer, memory))
     }
@@ -288,7 +290,7 @@ mod texture {
     use crate::renderer::allocator::{Allocator, AllocatorTrait, Memory};
     use crate::RendererResult;
     use ash::vk;
-    use ash::{Device, Instance};
+    use ash::Device;
 
     /// Helper struct representing a sampled texture.
     pub struct Texture {
@@ -313,9 +315,7 @@ mod texture {
         /// * `height` - The height of the image.
         /// * `data` - The image data.
         pub fn from_rgba8(
-            instance: &Instance,
             device: &Device,
-            physical_device: vk::PhysicalDevice,
             queue: vk::Queue,
             command_pool: vk::CommandPool,
             allocator: &Allocator,
@@ -325,16 +325,7 @@ mod texture {
         ) -> RendererResult<Self> {
             let (texture, staging_buff, staging_mem) =
                 execute_one_time_commands(device, queue, command_pool, |buffer| {
-                    Self::cmd_from_rgba(
-                        instance,
-                        device,
-                        physical_device,
-                        allocator,
-                        buffer,
-                        width,
-                        height,
-                        data,
-                    )
+                    Self::cmd_from_rgba(device, allocator, buffer, width, height, data)
                 })??;
 
             allocator.destroy_buffer(device, staging_buff, &staging_mem)?;
@@ -343,9 +334,7 @@ mod texture {
         }
 
         fn cmd_from_rgba(
-            instance: &Instance,
             device: &Device,
-            physical_device: vk::PhysicalDevice,
             allocator: &Allocator,
             command_buffer: vk::CommandBuffer,
             width: u32,
@@ -353,16 +342,13 @@ mod texture {
             data: &[u8],
         ) -> RendererResult<(Self, vk::Buffer, Memory)> {
             let (buffer, buffer_mem) = create_and_fill_buffer(
-                instance,
                 device,
-                physical_device,
                 allocator,
                 data,
                 vk::BufferUsageFlags::TRANSFER_SRC,
             )?;
 
-            let (image, image_mem) =
-                allocator.create_image(instance, device, physical_device, width, height)?;
+            let (image, image_mem) = allocator.create_image(device, width, height)?;
 
             // Transition the image layout and copy the buffer into the image
             // and transition the layout again to be readable from fragment shader.

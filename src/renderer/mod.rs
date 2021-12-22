@@ -30,9 +30,7 @@ pub type RendererResult<T> = Result<T, RendererError>;
 /// [`destroy`]: #method.destroy
 /// [`RendererVkContext`]: trait.RendererVkContext.html
 pub struct Renderer {
-    instance: Instance,
     device: Device,
-    physical_device: vk::PhysicalDevice,
     allocator: Allocator,
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
@@ -66,22 +64,23 @@ impl Renderer {
     /// [`RendererVkContext`]: trait.RendererVkContext.html
     /// [`RendererError`]: enum.RendererError.html
     pub fn new(
-        instance: Instance,
-        device: Device,
+        instance: &Instance,
         physical_device: vk::PhysicalDevice,
+        device: Device,
         queue: vk::Queue,
         command_pool: vk::CommandPool,
         in_flight_frames: usize,
         render_pass: vk::RenderPass,
         imgui: &mut Context,
     ) -> RendererResult<Self> {
+        let memory_properties =
+            unsafe { instance.get_physical_device_memory_properties(physical_device) };
+
         Self::from_allocator(
-            instance,
             device,
-            physical_device,
             queue,
             command_pool,
-            Allocator::defaut(),
+            Allocator::defaut(memory_properties),
             in_flight_frames,
             render_pass,
             imgui,
@@ -89,9 +88,7 @@ impl Renderer {
     }
 
     fn from_allocator(
-        instance: Instance,
         device: Device,
-        physical_device: vk::PhysicalDevice,
         queue: vk::Queue,
         command_pool: vk::CommandPool,
         allocator: Allocator,
@@ -118,9 +115,7 @@ impl Renderer {
             let atlas_texture = fonts.build_rgba32_texture();
 
             Texture::from_rgba8(
-                &instance,
                 &device,
-                physical_device,
                 queue,
                 command_pool,
                 &allocator,
@@ -149,9 +144,7 @@ impl Renderer {
         let textures = Textures::new();
 
         Ok(Self {
-            instance,
             device,
-            physical_device,
             allocator,
             pipeline,
             pipeline_layout,
@@ -251,9 +244,7 @@ impl Renderer {
 
         if self.frames.is_none() {
             self.frames.replace(Frames::new(
-                &self.instance,
                 &self.device,
-                self.physical_device,
                 &self.allocator,
                 draw_data,
                 self.in_flight_frames,
@@ -261,13 +252,7 @@ impl Renderer {
         }
 
         let mesh = self.frames.as_mut().unwrap().next();
-        mesh.update(
-            &self.instance,
-            &self.device,
-            self.physical_device,
-            &self.allocator,
-            draw_data,
-        )?;
+        mesh.update(&self.device, &self.allocator, draw_data)?;
 
         unsafe {
             self.device.cmd_bind_pipeline(
@@ -428,15 +413,13 @@ struct Frames {
 
 impl Frames {
     fn new(
-        instance: &Instance,
         device: &Device,
-        physical_device: vk::PhysicalDevice,
         allocator: &Allocator,
         draw_data: &DrawData,
         count: usize,
     ) -> RendererResult<Self> {
         let meshes = (0..count)
-            .map(|_| Mesh::new(instance, device, physical_device, allocator, draw_data))
+            .map(|_| Mesh::new(device, allocator, draw_data))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
             index: 0,
@@ -465,7 +448,7 @@ mod mesh {
     use super::allocator::{Allocator, AllocatorTrait, Memory};
     use super::vulkan::*;
     use crate::RendererResult;
-    use ash::{vk, Device, Instance};
+    use ash::{vk, Device};
     use imgui::{DrawData, DrawVert};
     use std::mem::size_of;
 
@@ -481,9 +464,7 @@ mod mesh {
 
     impl Mesh {
         pub fn new(
-            instance: &Instance,
             device: &Device,
-            physical_device: vk::PhysicalDevice,
             allocator: &Allocator,
             draw_data: &DrawData,
         ) -> RendererResult<Self> {
@@ -494,9 +475,7 @@ mod mesh {
 
             // Create a vertex buffer
             let (vertices, vertices_mem) = create_and_fill_buffer(
-                instance,
                 device,
-                physical_device,
                 allocator,
                 &vertices,
                 vk::BufferUsageFlags::VERTEX_BUFFER,
@@ -504,9 +483,7 @@ mod mesh {
 
             // Create an index buffer
             let (indices, indices_mem) = create_and_fill_buffer(
-                instance,
                 device,
-                physical_device,
                 allocator,
                 &indices,
                 vk::BufferUsageFlags::INDEX_BUFFER,
@@ -524,9 +501,7 @@ mod mesh {
 
         pub fn update(
             &mut self,
-            instance: &Instance,
             device: &Device,
-            physical_device: vk::PhysicalDevice,
             allocator: &Allocator,
             draw_data: &DrawData,
         ) -> RendererResult<()> {
@@ -536,13 +511,8 @@ mod mesh {
                 self.destroy_vertices(device, allocator)?;
                 let vertex_count = vertices.len();
                 let size = vertex_count * size_of::<DrawVert>();
-                let (vertices, vertices_mem) = allocator.create_buffer(
-                    instance,
-                    device,
-                    physical_device,
-                    size,
-                    vk::BufferUsageFlags::VERTEX_BUFFER,
-                )?;
+                let (vertices, vertices_mem) =
+                    allocator.create_buffer(device, size, vk::BufferUsageFlags::VERTEX_BUFFER)?;
 
                 self.vertices = vertices;
                 self.vertices_mem = vertices_mem;
@@ -556,13 +526,8 @@ mod mesh {
                 self.destroy_indices(device, allocator)?;
                 let index_count = indices.len();
                 let size = index_count * size_of::<u16>();
-                let (indices, indices_mem) = allocator.create_buffer(
-                    instance,
-                    device,
-                    physical_device,
-                    size,
-                    vk::BufferUsageFlags::INDEX_BUFFER,
-                )?;
+                let (indices, indices_mem) =
+                    allocator.create_buffer(device, size, vk::BufferUsageFlags::INDEX_BUFFER)?;
                 self.indices = indices;
                 self.indices_mem = indices_mem;
                 self.index_count = index_count;

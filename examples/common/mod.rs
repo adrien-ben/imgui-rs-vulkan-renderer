@@ -125,9 +125,9 @@ impl<A: App> System<A> {
         platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Rounded);
 
         let renderer = Renderer::new(
-            vulkan_context.instance.clone(),
-            vulkan_context.device.clone(),
+            &vulkan_context.instance,
             vulkan_context.physical_device,
+            vulkan_context.device.clone(),
             vulkan_context.graphics_queue,
             vulkan_context.command_pool,
             1,

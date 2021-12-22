@@ -1,19 +1,21 @@
 use crate::RendererResult;
-use ash::{vk, Device, Instance};
+use ash::{vk, Device};
 
 use super::{AllocatorTrait, Memory};
 
-pub struct DefaultAllocator;
+pub struct DefaultAllocator {
+    pub memory_properties: vk::PhysicalDeviceMemoryProperties,
+}
 
 impl DefaultAllocator {
-    pub fn find_memory_type(
+    fn find_memory_type(
+        &self,
         requirements: vk::MemoryRequirements,
-        mem_properties: vk::PhysicalDeviceMemoryProperties,
         required_properties: vk::MemoryPropertyFlags,
     ) -> u32 {
-        for i in 0..mem_properties.memory_type_count {
+        for i in 0..self.memory_properties.memory_type_count {
             if requirements.memory_type_bits & (1 << i) != 0
-                && mem_properties.memory_types[i as usize]
+                && self.memory_properties.memory_types[i as usize]
                     .property_flags
                     .contains(required_properties)
             {
@@ -27,15 +29,10 @@ impl DefaultAllocator {
 impl AllocatorTrait for DefaultAllocator {
     fn create_buffer(
         &self,
-        instance: &Instance,
         device: &Device,
-        physical_device: vk::PhysicalDevice,
         size: usize,
         usage: vk::BufferUsageFlags,
     ) -> RendererResult<(vk::Buffer, Memory)> {
-        let memory_properties =
-            unsafe { instance.get_physical_device_memory_properties(physical_device) };
-
         let buffer_info = vk::BufferCreateInfo::builder()
             .size(size as _)
             .usage(usage)
@@ -45,9 +42,8 @@ impl AllocatorTrait for DefaultAllocator {
         let buffer = unsafe { device.create_buffer(&buffer_info, None)? };
 
         let mem_requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
-        let mem_type = Self::find_memory_type(
+        let mem_type = self.find_memory_type(
             mem_requirements,
-            memory_properties,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         );
 
@@ -62,9 +58,7 @@ impl AllocatorTrait for DefaultAllocator {
 
     fn create_image(
         &self,
-        instance: &Instance,
         device: &Device,
-        physical_device: vk::PhysicalDevice,
         width: u32,
         height: u32,
     ) -> RendererResult<(vk::Image, Memory)> {
@@ -89,13 +83,8 @@ impl AllocatorTrait for DefaultAllocator {
 
         let image = unsafe { device.create_image(&image_info, None)? };
         let mem_requirements = unsafe { device.get_image_memory_requirements(image) };
-        let memory_properties =
-            unsafe { instance.get_physical_device_memory_properties(physical_device) };
-        let mem_type_index = Self::find_memory_type(
-            mem_requirements,
-            memory_properties,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        );
+        let mem_type_index =
+            self.find_memory_type(mem_requirements, vk::MemoryPropertyFlags::DEVICE_LOCAL);
 
         let alloc_info = vk::MemoryAllocateInfo::builder()
             .allocation_size(mem_requirements.size)
