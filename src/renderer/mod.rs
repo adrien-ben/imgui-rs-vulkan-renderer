@@ -43,7 +43,6 @@ pub struct Renderer {
     textures: Textures<vk::DescriptorSet>,
     in_flight_frames: usize,
     frames: Option<Frames>,
-    destroyed: bool,
 }
 
 impl Renderer {
@@ -163,7 +162,6 @@ impl Renderer {
             textures,
             in_flight_frames,
             frames: None,
-            destroyed: false,
         })
     }
 
@@ -187,10 +185,6 @@ impl Renderer {
     /// [`RendererError`]: enum.RendererError.html
     /// [`destroy`]: #method.destroy
     pub fn set_render_pass(&mut self, render_pass: vk::RenderPass) -> RendererResult<()> {
-        if self.destroyed {
-            return Err(RendererError::Destroyed);
-        }
-
         unsafe { self.device.destroy_pipeline(self.pipeline, None) };
         self.pipeline = create_vulkan_pipeline(&self.device, self.pipeline_layout, render_pass)?;
         Ok(())
@@ -251,10 +245,6 @@ impl Renderer {
         command_buffer: vk::CommandBuffer,
         draw_data: &DrawData,
     ) -> RendererResult<()> {
-        if self.destroyed {
-            return Err(RendererError::Destroyed);
-        }
-
         if draw_data.total_vtx_count == 0 {
             return Ok(());
         }
@@ -405,40 +395,27 @@ impl Renderer {
 
         Ok(())
     }
+}
 
-    /// Destroy Vulkan resources held by the renderer.
-    ///
-    /// # Arguments
-    ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
-    ///
-    /// # Errors
-    ///
-    /// * [`RendererError`] - If the method is call after [`destroy`] was called.
-    ///
-    /// [`destroy`]: #method.destroy
-    /// [`RendererVkContext`]: trait.RendererVkContext.html
-    /// [`RendererError`]: enum.RendererError.html
-    pub fn destroy(&mut self) -> RendererResult<()> {
-        if self.destroyed {
-            return Err(RendererError::Destroyed);
-        }
-
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        log::debug!("Destroying ImGui Renderer");
         let device = &self.device;
 
         unsafe {
             if let Some(mut frames) = self.frames.take() {
-                frames.destroy(device, &self.allocator)?;
+                frames
+                    .destroy(device, &self.allocator)
+                    .expect("Failed to destroy frame data");
             }
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_pool(self.descriptor_pool, None);
-            self.fonts_texture.destroy(device, &self.allocator)?;
+            self.fonts_texture
+                .destroy(device, &self.allocator)
+                .expect("Failed to fronts data");
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
-        self.destroyed = true;
-
-        Ok(())
     }
 }
 

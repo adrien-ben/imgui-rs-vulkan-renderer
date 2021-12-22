@@ -145,12 +145,7 @@ pub(crate) fn create_vulkan_pipeline(
         .alpha_to_one_enable(false);
 
     let color_blend_attachments = [vk::PipelineColorBlendAttachmentState::builder()
-        .color_write_mask(
-            vk::ColorComponentFlags::R
-                | vk::ColorComponentFlags::G
-                | vk::ColorComponentFlags::B
-                | vk::ColorComponentFlags::A,
-        )
+        .color_write_mask(vk::ColorComponentFlags::R | vk::ColorComponentFlags::G | vk::ColorComponentFlags::B | vk::ColorComponentFlags::A)
         .blend_enable(true)
         .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
         .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)

@@ -178,6 +178,8 @@ impl<A: App> System<A> {
 
         // Main loop
         event_loop.run(move |event, _, control_flow| {
+            let mut renderer = &mut renderer; // Makes sure Renderer is moved before VulkanContext and therefore dropped before
+
             *control_flow = ControlFlow::Poll;
 
             platform.handle_event(imgui.io_mut(), &window, &event);
@@ -331,7 +333,6 @@ impl<A: App> System<A> {
 
                         app.destroy(&vulkan_context);
 
-                        renderer.destroy().expect("Failed to destroy renderer.");
                         vulkan_context.device.destroy_fence(fence, None);
                         vulkan_context
                             .device
@@ -429,6 +430,7 @@ impl VulkanContext {
 
 impl Drop for VulkanContext {
     fn drop(&mut self) {
+        log::debug!("Destroying Vulkan Context");
         unsafe {
             self.device.destroy_command_pool(self.command_pool, None);
             self.device.destroy_device(None);
