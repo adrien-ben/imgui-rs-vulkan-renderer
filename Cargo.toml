@@ -23,10 +23,13 @@ imgui = "^0.8"
 ash = "0.34"
 ultraviolet = "0.8" 
 
+gpu-allocator = { version = "0.12", default-features = false, features = ["vulkan"], optional = true }
+
 [dev-dependencies]
 simple_logger = "1.11"
-winit = "0.25.0"
-imgui-winit-support = { version = "^0.8", default-features = false, features = ["winit-25"] }
+winit = "0.26.0"
+imgui-winit-support = { version = "^0.8", default-features = false, features = ["winit-26"] }
 ash = "0.34"
 ash-window = "0.8"
 image = "0.23"
+imgui-rs-vulkan-renderer = { path = ".", features = ["gpu-allocator"] }

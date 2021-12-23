@@ -1,7 +1,7 @@
 use crate::RendererResult;
 use ash::{vk, Device};
 
-use super::{AllocatorTrait, Memory};
+use super::Allocate;
 
 pub struct DefaultAllocator {
     pub memory_properties: vk::PhysicalDeviceMemoryProperties,
@@ -26,13 +26,15 @@ impl DefaultAllocator {
     }
 }
 
-impl AllocatorTrait for DefaultAllocator {
+impl Allocate for DefaultAllocator {
+    type Memory = vk::DeviceMemory;
+
     fn create_buffer(
-        &self,
+        &mut self,
         device: &Device,
         size: usize,
         usage: vk::BufferUsageFlags,
-    ) -> RendererResult<(vk::Buffer, Memory)> {
+    ) -> RendererResult<(vk::Buffer, Self::Memory)> {
         let buffer_info = vk::BufferCreateInfo::builder()
             .size(size as _)
             .usage(usage)
@@ -53,15 +55,15 @@ impl AllocatorTrait for DefaultAllocator {
         let memory = unsafe { device.allocate_memory(&alloc_info, None)? };
         unsafe { device.bind_buffer_memory(buffer, memory, 0)? };
 
-        Ok((buffer, Memory::DeviceMemory(memory)))
+        Ok((buffer, memory))
     }
 
     fn create_image(
-        &self,
+        &mut self,
         device: &Device,
         width: u32,
         height: u32,
-    ) -> RendererResult<(vk::Image, Memory)> {
+    ) -> RendererResult<(vk::Image, Self::Memory)> {
         let extent = vk::Extent3D {
             width,
             height,
@@ -95,6 +97,51 @@ impl AllocatorTrait for DefaultAllocator {
             mem
         };
 
-        Ok((image, Memory::DeviceMemory(memory)))
+        Ok((image, memory))
+    }
+
+    fn destroy_buffer(
+        &mut self,
+        device: &Device,
+        buffer: vk::Buffer,
+        memory: Self::Memory,
+    ) -> RendererResult<()> {
+        unsafe {
+            device.destroy_buffer(buffer, None);
+            device.free_memory(memory, None);
+        }
+
+        Ok(())
+    }
+
+    fn destroy_image(
+        &mut self,
+        device: &Device,
+        image: vk::Image,
+        memory: Self::Memory,
+    ) -> RendererResult<()> {
+        unsafe {
+            device.destroy_image(image, None);
+            device.free_memory(memory, None);
+        }
+
+        Ok(())
+    }
+
+    fn update_buffer<T: Copy>(
+        &mut self,
+        device: &Device,
+        memory: &Self::Memory,
+        data: &[T],
+    ) -> RendererResult<()> {
+        let size = (data.len() * std::mem::size_of::<T>()) as _;
+        unsafe {
+            let data_ptr = device.map_memory(*memory, 0, size, vk::MemoryMapFlags::empty())?;
+            let mut align = ash::util::Align::new(data_ptr, std::mem::align_of::<T>() as _, size);
+            align.copy_from_slice(data);
+            device.unmap_memory(*memory);
+        }
+
+        Ok(())
     }
 }

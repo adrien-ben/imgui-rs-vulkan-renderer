@@ -1,17 +1,79 @@
 mod default;
 
+#[cfg(feature = "gpu-allocator")]
+mod gpu;
+
+use std::convert::{TryFrom, TryInto};
+
 use crate::RendererResult;
 use ash::{vk, Device};
 
 use self::default::DefaultAllocator;
 
+#[cfg(feature = "gpu-allocator")]
+use {
+    self::gpu::GpuAllocator,
+    gpu_allocator::vulkan::Allocation,
+    std::sync::{Arc, Mutex},
+};
+
 /// Abstraction over memory used by Vulkan resources.
 pub enum Memory {
     DeviceMemory(vk::DeviceMemory),
+    #[cfg(feature = "gpu-allocator")]
+    GpuAllocation(Allocation),
+}
+
+impl TryFrom<Memory> for vk::DeviceMemory {
+    type Error = String;
+
+    fn try_from(memory: Memory) -> Result<Self, Self::Error> {
+        match memory {
+            Memory::DeviceMemory(memory) => Ok(memory),
+            _ => Err("Incompatible memory type".into()),
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a Memory> for &'a vk::DeviceMemory {
+    type Error = String;
+
+    fn try_from(memory: &'a Memory) -> Result<Self, Self::Error> {
+        match memory {
+            Memory::DeviceMemory(memory) => Ok(memory),
+            _ => Err("Incompatible memory type".into()),
+        }
+    }
+}
+
+#[cfg(feature = "gpu-allocator")]
+impl TryFrom<Memory> for Allocation {
+    type Error = String;
+
+    fn try_from(memory: Memory) -> Result<Self, Self::Error> {
+        match memory {
+            Memory::GpuAllocation(allocation) => Ok(allocation),
+            _ => Err("Incompatible memory type".into()),
+        }
+    }
+}
+
+#[cfg(feature = "gpu-allocator")]
+impl<'a> TryFrom<&'a Memory> for &'a Allocation {
+    type Error = String;
+
+    fn try_from(memory: &'a Memory) -> Result<Self, Self::Error> {
+        match memory {
+            Memory::GpuAllocation(allocation) => Ok(allocation),
+            _ => Err("Incompatible memory type".into()),
+        }
+    }
 }
 
 /// Base allocator trait for all implementations.
-pub trait AllocatorTrait {
+pub trait Allocate {
+    type Memory;
+
     /// Create a Vulkan buffer.
     ///
     /// # Arguments
@@ -20,11 +82,11 @@ pub trait AllocatorTrait {
     /// * `size` - The size in bytes of the buffer.
     /// * `usage` - The buffer usage flags.
     fn create_buffer(
-        &self,
+        &mut self,
         device: &Device,
         size: usize,
         usage: vk::BufferUsageFlags,
-    ) -> RendererResult<(vk::Buffer, Memory)>;
+    ) -> RendererResult<(vk::Buffer, Self::Memory)>;
 
     /// Create a Vulkan image.
     ///
@@ -36,11 +98,11 @@ pub trait AllocatorTrait {
     /// * `width` - The width of the image to create.
     /// * `height` - The height of the image to create.
     fn create_image(
-        &self,
+        &mut self,
         device: &Device,
         width: u32,
         height: u32,
-    ) -> RendererResult<(vk::Image, Memory)>;
+    ) -> RendererResult<(vk::Image, Self::Memory)>;
 
     /// Destroys a buffer.
     ///
@@ -50,20 +112,11 @@ pub trait AllocatorTrait {
     /// * `buffer` - The buffer to destroy.
     /// * `memory` - The buffer memory to destroy.
     fn destroy_buffer(
-        &self,
+        &mut self,
         device: &Device,
         buffer: vk::Buffer,
-        memory: &Memory,
-    ) -> RendererResult<()> {
-        match memory {
-            Memory::DeviceMemory(memory) => unsafe {
-                device.destroy_buffer(buffer, None);
-                device.free_memory(*memory, None);
-            },
-        }
-
-        Ok(())
-    }
+        memory: Self::Memory,
+    ) -> RendererResult<()>;
 
     /// Destroys an image.
     ///
@@ -73,20 +126,11 @@ pub trait AllocatorTrait {
     /// * `image` - The image to destroy.
     /// * `memory` - The image memory to destroy.
     fn destroy_image(
-        &self,
+        &mut self,
         device: &Device,
         image: vk::Image,
-        memory: &Memory,
-    ) -> RendererResult<()> {
-        match memory {
-            Memory::DeviceMemory(memory) => unsafe {
-                device.destroy_image(image, None);
-                device.free_memory(*memory, None);
-            },
-        }
-
-        Ok(())
-    }
+        memory: Self::Memory,
+    ) -> RendererResult<()>;
 
     /// Update buffer data
     ///
@@ -96,26 +140,11 @@ pub trait AllocatorTrait {
     /// * `buffer_memory` - The memory of the buffer to update.
     /// * `data` - The data to update the buffer with.
     fn update_buffer<T: Copy>(
-        &self,
+        &mut self,
         device: &Device,
-        buffer_memory: &Memory,
+        memory: &Self::Memory,
         data: &[T],
-    ) -> RendererResult<()> {
-        let size = (data.len() * std::mem::size_of::<T>()) as _;
-        unsafe {
-            match buffer_memory {
-                Memory::DeviceMemory(memory) => {
-                    let data_ptr =
-                        device.map_memory(*memory, 0, size, vk::MemoryMapFlags::empty())?;
-                    let mut align =
-                        ash::util::Align::new(data_ptr, std::mem::align_of::<T>() as _, size);
-                    align.copy_from_slice(data);
-                    device.unmap_memory(*memory);
-                }
-            }
-        };
-        Ok(())
-    }
+    ) -> RendererResult<()>;
 }
 
 /// Vulkan resource allocator.
@@ -127,6 +156,8 @@ pub trait AllocatorTrait {
 /// * `Default` - Default allocator.
 pub enum Allocator {
     Default(DefaultAllocator),
+    #[cfg(feature = "gpu-allocator")]
+    Gpu(GpuAllocator),
 }
 
 impl Allocator {
@@ -134,28 +165,119 @@ impl Allocator {
     pub fn defaut(memory_properties: vk::PhysicalDeviceMemoryProperties) -> Self {
         Self::Default(DefaultAllocator { memory_properties })
     }
+
+    #[cfg(feature = "gpu-allocator")]
+    pub fn gpu(allocator: Arc<Mutex<gpu_allocator::vulkan::Allocator>>) -> Self {
+        Self::Gpu(GpuAllocator { allocator })
+    }
 }
 
-impl AllocatorTrait for Allocator {
+impl Allocate for Allocator {
+    type Memory = Memory;
+
     fn create_buffer(
-        &self,
+        &mut self,
         device: &Device,
         size: usize,
         usage: vk::BufferUsageFlags,
-    ) -> RendererResult<(vk::Buffer, Memory)> {
+    ) -> RendererResult<(vk::Buffer, Self::Memory)> {
         match self {
-            Self::Default(allocator) => allocator.create_buffer(device, size, usage),
+            Self::Default(allocator) => allocator
+                .create_buffer(device, size, usage)
+                .map(|(buffer, mem)| (buffer, Memory::DeviceMemory(mem))),
+            #[cfg(feature = "gpu-allocator")]
+            Self::Gpu(allocator) => allocator
+                .create_buffer(device, size, usage)
+                .map(|(buffer, mem)| (buffer, Memory::GpuAllocation(mem))),
         }
     }
 
     fn create_image(
-        &self,
+        &mut self,
         device: &Device,
         width: u32,
         height: u32,
-    ) -> RendererResult<(vk::Image, Memory)> {
+    ) -> RendererResult<(vk::Image, Self::Memory)> {
         match self {
-            Self::Default(allocator) => allocator.create_image(device, width, height),
+            Self::Default(allocator) => allocator
+                .create_image(device, width, height)
+                .map(|(image, mem)| (image, Memory::DeviceMemory(mem))),
+            #[cfg(feature = "gpu-allocator")]
+            Self::Gpu(allocator) => allocator
+                .create_image(device, width, height)
+                .map(|(image, mem)| (image, Memory::GpuAllocation(mem))),
+        }
+    }
+
+    /// Destroys a buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `buffer` - The buffer to destroy.
+    /// * `memory` - The buffer memory to destroy.
+    fn destroy_buffer(
+        &mut self,
+        device: &Device,
+        buffer: vk::Buffer,
+        memory: Self::Memory,
+    ) -> RendererResult<()> {
+        match self {
+            Self::Default(allocator) => {
+                allocator.destroy_buffer(device, buffer, memory.try_into().unwrap())
+            }
+            #[cfg(feature = "gpu-allocator")]
+            Self::Gpu(allocator) => {
+                allocator.destroy_buffer(device, buffer, memory.try_into().unwrap())
+            }
+        }
+    }
+
+    /// Destroys an image.
+    ///
+    /// # Arguments
+    ///
+    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `image` - The image to destroy.
+    /// * `memory` - The image memory to destroy.
+    fn destroy_image(
+        &mut self,
+        device: &Device,
+        image: vk::Image,
+        memory: Self::Memory,
+    ) -> RendererResult<()> {
+        match self {
+            Self::Default(allocator) => {
+                allocator.destroy_image(device, image, memory.try_into().unwrap())
+            }
+            #[cfg(feature = "gpu-allocator")]
+            Self::Gpu(allocator) => {
+                allocator.destroy_image(device, image, memory.try_into().unwrap())
+            }
+        }
+    }
+
+    /// Update buffer data
+    ///
+    /// # Arguments
+    ///
+    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `buffer_memory` - The memory of the buffer to update.
+    /// * `data` - The data to update the buffer with.
+    fn update_buffer<T: Copy>(
+        &mut self,
+        device: &Device,
+        memory: &Self::Memory,
+        data: &[T],
+    ) -> RendererResult<()> {
+        match self {
+            Self::Default(allocator) => {
+                allocator.update_buffer(device, memory.try_into().unwrap(), data)
+            }
+            #[cfg(feature = "gpu-allocator")]
+            Self::Gpu(allocator) => {
+                allocator.update_buffer(device, memory.try_into().unwrap(), data)
+            }
         }
     }
 }

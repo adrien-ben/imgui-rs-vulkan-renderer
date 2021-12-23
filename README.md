@@ -76,6 +76,10 @@ You can run a set of examples by running the following command:
 export VK_LAYER_PATH=$VULKAN_SDK/Bin
 export VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation
 
+# Or with Powershell
+$env:VK_LAYER_PATH = "$env:VULKAN_SDK\Bin"
+$env:VK_INSTANCE_LAYERS = "VK_LAYER_KHRONOS_validation"
+
 # If you changed the shader code (you'll need glslangValidator on you PATH)
 # There is also a PowerShell version (compile_shaders.ps1)
 ./compile_shaders.sh

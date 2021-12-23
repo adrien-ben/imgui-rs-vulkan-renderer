@@ -261,7 +261,7 @@ pub fn create_vulkan_descriptor_set(
 mod buffer {
 
     use crate::{
-        renderer::allocator::{Allocator, AllocatorTrait, Memory},
+        renderer::allocator::{Allocate, Allocator, Memory},
         RendererResult,
     };
     use ash::vk;
@@ -270,7 +270,7 @@ mod buffer {
 
     pub fn create_and_fill_buffer<T>(
         device: &Device,
-        allocator: &Allocator,
+        allocator: &mut Allocator,
         data: &[T],
         usage: vk::BufferUsageFlags,
     ) -> RendererResult<(vk::Buffer, Memory)>
@@ -287,7 +287,7 @@ mod buffer {
 mod texture {
 
     use super::buffer::*;
-    use crate::renderer::allocator::{Allocator, AllocatorTrait, Memory};
+    use crate::renderer::allocator::{Allocate, Allocator, Memory};
     use crate::RendererResult;
     use ash::vk;
     use ash::Device;
@@ -318,7 +318,7 @@ mod texture {
             device: &Device,
             queue: vk::Queue,
             command_pool: vk::CommandPool,
-            allocator: &Allocator,
+            allocator: &mut Allocator,
             width: u32,
             height: u32,
             data: &[u8],
@@ -328,14 +328,14 @@ mod texture {
                     Self::cmd_from_rgba(device, allocator, buffer, width, height, data)
                 })??;
 
-            allocator.destroy_buffer(device, staging_buff, &staging_mem)?;
+            allocator.destroy_buffer(device, staging_buff, staging_mem)?;
 
             Ok(texture)
         }
 
         fn cmd_from_rgba(
             device: &Device,
-            allocator: &Allocator,
+            allocator: &mut Allocator,
             command_buffer: vk::CommandBuffer,
             width: u32,
             height: u32,
@@ -474,11 +474,11 @@ mod texture {
         }
 
         /// Free texture's resources.
-        pub fn destroy(&mut self, device: &Device, allocator: &Allocator) -> RendererResult<()> {
+        pub fn destroy(self, device: &Device, allocator: &mut Allocator) -> RendererResult<()> {
             unsafe {
                 device.destroy_sampler(self.sampler, None);
                 device.destroy_image_view(self.image_view, None);
-                allocator.destroy_image(device, self.image, &self.image_mem)?;
+                allocator.destroy_image(device, self.image, self.image_mem)?;
             }
             Ok(())
         }

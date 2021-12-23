@@ -7,9 +7,11 @@ use ash::{
     },
     vk, Device, Entry, Instance,
 };
+use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use imgui::*;
 use imgui_rs_vulkan_renderer::*;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use std::sync::{Arc, Mutex};
 use std::{
     error::Error,
     ffi::{CStr, CString},
@@ -124,9 +126,16 @@ impl<A: App> System<A> {
         imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
         platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Rounded);
 
-        let renderer = Renderer::new(
-            &vulkan_context.instance,
-            vulkan_context.physical_device,
+        let allocator = Allocator::new(&AllocatorCreateDesc {
+            instance: vulkan_context.instance.clone(),
+            device: vulkan_context.device.clone(),
+            physical_device: vulkan_context.physical_device,
+            debug_settings: Default::default(),
+            buffer_device_address: false,
+        })?;
+
+        let renderer = Renderer::with_gpu_allocator(
+            Arc::new(Mutex::new(allocator)),
             vulkan_context.device.clone(),
             vulkan_context.graphics_queue,
             vulkan_context.command_pool,
@@ -134,6 +143,17 @@ impl<A: App> System<A> {
             swapchain.render_pass,
             &mut imgui,
         )?;
+
+        // let renderer = Renderer::new(
+        //     &vulkan_context.instance,
+        //     vulkan_context.physical_device,
+        //     vulkan_context.device.clone(),
+        //     vulkan_context.graphics_queue,
+        //     vulkan_context.command_pool,
+        //     1,
+        //     swapchain.render_pass,
+        //     &mut imgui,
+        // )?;
 
         Ok(Self {
             phantom_data: PhantomData,

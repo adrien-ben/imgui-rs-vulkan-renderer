@@ -10,6 +10,12 @@ use vulkan::*;
 
 use self::allocator::Allocator;
 
+#[cfg(feature = "gpu-allocator")]
+use {
+    gpu_allocator::vulkan::Allocator as GpuAllocator,
+    std::sync::{Arc, Mutex},
+};
+
 /// Convenient return type for function that can return a [`RendererError`].
 ///
 /// [`RendererError`]: enum.RendererError.html
@@ -35,7 +41,7 @@ pub struct Renderer {
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
     descriptor_set_layout: vk::DescriptorSetLayout,
-    fonts_texture: Texture,
+    fonts_texture: Option<Texture>,
     descriptor_pool: vk::DescriptorPool,
     descriptor_set: vk::DescriptorSet,
     textures: Textures<vk::DescriptorSet>,
@@ -87,11 +93,32 @@ impl Renderer {
         )
     }
 
+    #[cfg(feature = "gpu-allocator")]
+    pub fn with_gpu_allocator(
+        gpu_allocator: Arc<Mutex<GpuAllocator>>, // TODO: Another way ?
+        device: Device,
+        queue: vk::Queue,
+        command_pool: vk::CommandPool,
+        in_flight_frames: usize,
+        render_pass: vk::RenderPass,
+        imgui: &mut Context,
+    ) -> RendererResult<Self> {
+        Self::from_allocator(
+            device,
+            queue,
+            command_pool,
+            Allocator::gpu(gpu_allocator),
+            in_flight_frames,
+            render_pass,
+            imgui,
+        )
+    }
+
     fn from_allocator(
         device: Device,
         queue: vk::Queue,
         command_pool: vk::CommandPool,
-        allocator: Allocator,
+        mut allocator: Allocator,
         in_flight_frames: usize,
         render_pass: vk::RenderPass,
         imgui: &mut Context,
@@ -118,7 +145,7 @@ impl Renderer {
                 &device,
                 queue,
                 command_pool,
-                &allocator,
+                &mut allocator,
                 atlas_texture.width,
                 atlas_texture.height,
                 atlas_texture.data,
@@ -149,7 +176,7 @@ impl Renderer {
             pipeline,
             pipeline_layout,
             descriptor_set_layout,
-            fonts_texture,
+            fonts_texture: Some(fonts_texture),
             descriptor_pool,
             descriptor_set,
             textures,
@@ -245,14 +272,14 @@ impl Renderer {
         if self.frames.is_none() {
             self.frames.replace(Frames::new(
                 &self.device,
-                &self.allocator,
+                &mut self.allocator,
                 draw_data,
                 self.in_flight_frames,
             )?);
         }
 
         let mesh = self.frames.as_mut().unwrap().next();
-        mesh.update(&self.device, &self.allocator, draw_data)?;
+        mesh.update(&self.device, &mut self.allocator, draw_data)?;
 
         unsafe {
             self.device.cmd_bind_pipeline(
@@ -388,16 +415,18 @@ impl Drop for Renderer {
         let device = &self.device;
 
         unsafe {
-            if let Some(mut frames) = self.frames.take() {
+            if let Some(frames) = self.frames.take() {
                 frames
-                    .destroy(device, &self.allocator)
+                    .destroy(device, &mut self.allocator)
                     .expect("Failed to destroy frame data");
             }
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_pool(self.descriptor_pool, None);
             self.fonts_texture
-                .destroy(device, &self.allocator)
+                .take()
+                .unwrap()
+                .destroy(device, &mut self.allocator)
                 .expect("Failed to fronts data");
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
@@ -414,7 +443,7 @@ struct Frames {
 impl Frames {
     fn new(
         device: &Device,
-        allocator: &Allocator,
+        allocator: &mut Allocator,
         draw_data: &DrawData,
         count: usize,
     ) -> RendererResult<Self> {
@@ -434,18 +463,17 @@ impl Frames {
         result
     }
 
-    fn destroy(&mut self, device: &Device, allocator: &Allocator) -> RendererResult<()> {
-        for mesh in self.meshes.iter_mut() {
+    fn destroy(self, device: &Device, allocator: &mut Allocator) -> RendererResult<()> {
+        for mesh in self.meshes.into_iter() {
             mesh.destroy(device, allocator)?;
         }
-        self.meshes.clear();
         Ok(())
     }
 }
 
 mod mesh {
 
-    use super::allocator::{Allocator, AllocatorTrait, Memory};
+    use super::allocator::{Allocate, Allocator, Memory};
     use super::vulkan::*;
     use crate::RendererResult;
     use ash::{vk, Device};
@@ -465,7 +493,7 @@ mod mesh {
     impl Mesh {
         pub fn new(
             device: &Device,
-            allocator: &Allocator,
+            allocator: &mut Allocator,
             draw_data: &DrawData,
         ) -> RendererResult<Self> {
             let vertices = create_vertices(draw_data);
@@ -502,62 +530,55 @@ mod mesh {
         pub fn update(
             &mut self,
             device: &Device,
-            allocator: &Allocator,
+            allocator: &mut Allocator,
             draw_data: &DrawData,
         ) -> RendererResult<()> {
             let vertices = create_vertices(draw_data);
             if draw_data.total_vtx_count as usize > self.vertex_count {
                 log::trace!("Resizing vertex buffers");
-                self.destroy_vertices(device, allocator)?;
+
                 let vertex_count = vertices.len();
                 let size = vertex_count * size_of::<DrawVert>();
                 let (vertices, vertices_mem) =
                     allocator.create_buffer(device, size, vk::BufferUsageFlags::VERTEX_BUFFER)?;
 
-                self.vertices = vertices;
-                self.vertices_mem = vertices_mem;
                 self.vertex_count = vertex_count;
+
+                let old_vertices = self.vertices;
+                self.vertices = vertices;
+
+                let old_vertices_mem = std::mem::replace(&mut self.vertices_mem, vertices_mem);
+
+                allocator.destroy_buffer(device, old_vertices, old_vertices_mem)?;
             }
             allocator.update_buffer(device, &self.vertices_mem, &vertices)?;
 
             let indices = create_indices(draw_data);
             if draw_data.total_idx_count as usize > self.index_count {
                 log::trace!("Resizing index buffers");
-                self.destroy_indices(device, allocator)?;
+
                 let index_count = indices.len();
                 let size = index_count * size_of::<u16>();
                 let (indices, indices_mem) =
                     allocator.create_buffer(device, size, vk::BufferUsageFlags::INDEX_BUFFER)?;
-                self.indices = indices;
-                self.indices_mem = indices_mem;
+
                 self.index_count = index_count;
+
+                let old_indices = self.indices;
+                self.indices = indices;
+
+                let old_indices_mem = std::mem::replace(&mut self.indices_mem, indices_mem);
+
+                allocator.destroy_buffer(device, old_indices, old_indices_mem)?;
             }
             allocator.update_buffer(device, &self.indices_mem, &indices)?;
 
             Ok(())
         }
 
-        pub fn destroy(&mut self, device: &Device, allocator: &Allocator) -> RendererResult<()> {
-            self.destroy_indices(device, allocator)?;
-            self.destroy_vertices(device, allocator)?;
-            Ok(())
-        }
-
-        fn destroy_vertices(
-            &mut self,
-            device: &Device,
-            allocator: &Allocator,
-        ) -> RendererResult<()> {
-            allocator.destroy_buffer(device, self.vertices, &self.vertices_mem)?;
-            Ok(())
-        }
-
-        fn destroy_indices(
-            &mut self,
-            device: &Device,
-            allocator: &Allocator,
-        ) -> RendererResult<()> {
-            allocator.destroy_buffer(device, self.indices, &self.indices_mem)?;
+        pub fn destroy(self, device: &Device, allocator: &mut Allocator) -> RendererResult<()> {
+            allocator.destroy_buffer(device, self.vertices, self.vertices_mem)?;
+            allocator.destroy_buffer(device, self.indices, self.indices_mem)?;
             Ok(())
         }
     }

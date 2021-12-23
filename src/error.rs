@@ -1,4 +1,6 @@
 use ash::vk;
+#[cfg(feature = "gpu-allocator")]
+use gpu_allocator::AllocationError;
 use imgui::TextureId;
 use thiserror::Error;
 
@@ -8,6 +10,10 @@ pub enum RendererError {
     /// Errors coming from calls to Vulkan functions.
     #[error("A Vulkan error occured: {0}")]
     Vulkan(#[from] vk::Result),
+
+    #[cfg(feature = "gpu-allocator")]
+    #[error("A Gpu allocator error occured: {0}")]
+    GpuAllocator(#[from] AllocationError),
 
     /// Io errors.
     #[error("A io error occured: {0}")]
@@ -20,4 +26,8 @@ pub enum RendererError {
     /// Texture lookup error.
     #[error("Bad texture ID: {}", .0.id())]
     BadTexture(TextureId),
+
+    /// Allocator error
+    #[error("A error occured when using the allocator: {0}")]
+    Allocator(String),
 }
