@@ -308,9 +308,9 @@ mod texture {
         /// # Arguments
         ///
         /// * `device` - The Vulkan logical device.
-        /// * `transfer_queue` - The queue with transfer capabilities to execute commands.
+        /// * `queue` - The queue with transfer capabilities to execute commands.
         /// * `command_pool` - The command pool used to create a command buffer used to record commands.
-        /// * `mem_properties` - The memory properties of the Vulkan physical device.
+        /// * `allocator` - Allocator used to allocate memory for the image.
         /// * `width` - The width of the image.
         /// * `height` - The height of the image.
         /// * `data` - The image data.

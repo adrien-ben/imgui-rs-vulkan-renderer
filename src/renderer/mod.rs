@@ -24,17 +24,11 @@ pub type RendererResult<T> = Result<T, RendererError>;
 /// Vulkan renderer for imgui.
 ///
 /// It records rendering command to the provided command buffer at each call to [`cmd_draw`].
-/// When done with the renderer you should call [`destroy`] before droping it to release all
-/// Vulkan resources held by the renderer.
-///
-/// All methods take a reference to a type implementing the [`RendererVkContext`] trait.
 ///
 /// The renderer holds a set of vertex/index buffers per in flight frames. Vertex and index buffers
 /// are resized at each call to [`cmd_draw`] if draw data does not fit.
 ///
 /// [`cmd_draw`]: #method.cmd_draw
-/// [`destroy`]: #method.destroy
-/// [`RendererVkContext`]: trait.RendererVkContext.html
 pub struct Renderer {
     device: Device,
     allocator: Allocator,
@@ -57,7 +51,15 @@ impl Renderer {
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `instance` - A reference to a Vulkan instance.
+    /// * `physical_device` - A Vulkan physical device.
+    /// * `device` - A Vulkan device.
+    /// * `queue` - A Vulkan queue.
+    ///             It will be used to submit commands during initialization to upload
+    ///             data to the gpu. The type of queue must be supported by the following
+    ///             commands: [vkCmdCopyBufferToImage](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html),
+    ///             [vkCmdPipelineBarrier](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPipelineBarrier.html)
+    /// * `command_pool` - A Vulkan command pool used to allocate command buffers to upload textures to the gpu.
     /// * `in_flight_frames` - The number of in flight frames of the application.
     /// * `render_pass` - The render pass used to render the gui.
     /// * `imgui` - The imgui context.
@@ -66,9 +68,6 @@ impl Renderer {
     ///
     /// * [`RendererError`] - If the number of in flight frame in incorrect.
     /// * [`RendererError`] - If any Vulkan or io error is encountered during initialization.
-    ///
-    /// [`RendererVkContext`]: trait.RendererVkContext.html
-    /// [`RendererError`]: enum.RendererError.html
     pub fn new(
         instance: &Instance,
         physical_device: vk::PhysicalDevice,
@@ -93,6 +92,29 @@ impl Renderer {
         )
     }
 
+    /// Initialize and return a new instance of the renderer.
+    ///
+    /// At initialization all Vulkan resources are initialized and font texture is created and
+    /// uploaded to the gpu. Vertex and index buffers are not created yet.
+    ///
+    /// # Arguments
+    ///
+    /// * `gpu_allocator` - The allocator that will be used to allocator buffer and iamge memory.
+    /// * `device` - A Vulkan device.
+    /// * `queue` - A Vulkan queue.
+    ///             It will be used to submit commands during initialization to upload
+    ///             data to the gpu. The type of queue must be supported by the following
+    ///             commands: [vkCmdCopyBufferToImage](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html),
+    ///             [vkCmdPipelineBarrier](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPipelineBarrier.html)
+    /// * `command_pool` - A Vulkan command pool used to allocate command buffers to upload textures to the gpu.
+    /// * `in_flight_frames` - The number of in flight frames of the application.
+    /// * `render_pass` - The render pass used to render the gui.
+    /// * `imgui` - The imgui context.
+    ///
+    /// # Errors
+    ///
+    /// * [`RendererError`] - If the number of in flight frame in incorrect.
+    /// * [`RendererError`] - If any Vulkan or io error is encountered during initialization.
     #[cfg(feature = "gpu-allocator")]
     pub fn with_gpu_allocator(
         gpu_allocator: Arc<Mutex<GpuAllocator>>, // TODO: Another way ?
@@ -193,17 +215,11 @@ impl Renderer {
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
     /// * `render_pass` - The render pass used to render the gui.
     ///
     /// # Errors
     ///
     /// * [`RendererError`] - If any Vulkan error is encountered during pipeline creation.
-    /// * [`RendererError`] - If the method is call after [`destroy`] was called.
-    ///
-    /// [`RendererVkContext`]: trait.RendererVkContext.html
-    /// [`RendererError`]: enum.RendererError.html
-    /// [`destroy`]: #method.destroy
     pub fn set_render_pass(&mut self, render_pass: vk::RenderPass) -> RendererResult<()> {
         unsafe { self.device.destroy_pipeline(self.pipeline, None) };
         self.pipeline = create_vulkan_pipeline(&self.device, self.pipeline_layout, render_pass)?;
@@ -248,18 +264,12 @@ impl Renderer {
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
     /// * `command_buffer` - The Vulkan command buffer that command will be recorded to.
     /// * `draw_data` - A reference to the imgui `DrawData` containing rendering data.
     ///
     /// # Errors
     ///
     /// * [`RendererError`] - If any Vulkan error is encountered during command recording.
-    /// * [`RendererError`] - If the method is call after [`destroy`] was called.
-    ///
-    /// [`RendererVkContext`]: trait.RendererVkContext.html
-    /// [`RendererError`]: enum.RendererError.html
-    /// [`destroy`]: #method.destroy
     pub fn cmd_draw(
         &mut self,
         command_buffer: vk::CommandBuffer,

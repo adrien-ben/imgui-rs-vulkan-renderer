@@ -78,7 +78,7 @@ pub trait Allocate {
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `device` - A reference to Vulkan device.
     /// * `size` - The size in bytes of the buffer.
     /// * `usage` - The buffer usage flags.
     fn create_buffer(
@@ -94,7 +94,7 @@ pub trait Allocate {
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `device` - A reference to Vulkan device.
     /// * `width` - The width of the image to create.
     /// * `height` - The height of the image to create.
     fn create_image(
@@ -108,7 +108,7 @@ pub trait Allocate {
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `device` - A reference to Vulkan device.
     /// * `buffer` - The buffer to destroy.
     /// * `memory` - The buffer memory to destroy.
     fn destroy_buffer(
@@ -122,7 +122,7 @@ pub trait Allocate {
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `device` - A reference to Vulkan device.
     /// * `image` - The image to destroy.
     /// * `memory` - The image memory to destroy.
     fn destroy_image(
@@ -136,8 +136,8 @@ pub trait Allocate {
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
-    /// * `buffer_memory` - The memory of the buffer to update.
+    /// * `device` - A reference to Vulkan device.
+    /// * `memory` - The memory of the buffer to update.
     /// * `data` - The data to update the buffer with.
     fn update_buffer<T: Copy>(
         &mut self,
@@ -154,6 +154,10 @@ pub trait Allocate {
 /// # Variants
 ///
 /// * `Default` - Default allocator.
+/// * `Gpu` - Allocator using [`gpu-allocator`] internally
+///
+/// [`gpu-allocator`]: https://github.com/Traverse-Research/gpu-allocator
+
 pub enum Allocator {
     Default(DefaultAllocator),
     #[cfg(feature = "gpu-allocator")]
@@ -209,13 +213,6 @@ impl Allocate for Allocator {
         }
     }
 
-    /// Destroys a buffer.
-    ///
-    /// # Arguments
-    ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
-    /// * `buffer` - The buffer to destroy.
-    /// * `memory` - The buffer memory to destroy.
     fn destroy_buffer(
         &mut self,
         device: &Device,
@@ -233,13 +230,6 @@ impl Allocate for Allocator {
         }
     }
 
-    /// Destroys an image.
-    ///
-    /// # Arguments
-    ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
-    /// * `image` - The image to destroy.
-    /// * `memory` - The image memory to destroy.
     fn destroy_image(
         &mut self,
         device: &Device,
@@ -257,13 +247,6 @@ impl Allocate for Allocator {
         }
     }
 
-    /// Update buffer data
-    ///
-    /// # Arguments
-    ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
-    /// * `buffer_memory` - The memory of the buffer to update.
-    /// * `data` - The data to update the buffer with.
     fn update_buffer<T: Copy>(
         &mut self,
         device: &Device,

@@ -1,4 +1,4 @@
-use crate::RendererResult;
+use crate::{RendererError, RendererResult};
 use ash::{vk, Device};
 
 use super::Allocate;
@@ -12,17 +12,19 @@ impl DefaultAllocator {
         &self,
         requirements: vk::MemoryRequirements,
         required_properties: vk::MemoryPropertyFlags,
-    ) -> u32 {
+    ) -> RendererResult<u32> {
         for i in 0..self.memory_properties.memory_type_count {
             if requirements.memory_type_bits & (1 << i) != 0
                 && self.memory_properties.memory_types[i as usize]
                     .property_flags
                     .contains(required_properties)
             {
-                return i;
+                return Ok(i);
             }
         }
-        panic!("Failed to find suitable memory type.")
+        Err(RendererError::Allocator(
+            "Failed to find suitable memory type.".into(),
+        ))
     }
 }
 
@@ -47,7 +49,7 @@ impl Allocate for DefaultAllocator {
         let mem_type = self.find_memory_type(
             mem_requirements,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        );
+        )?;
 
         let alloc_info = vk::MemoryAllocateInfo::builder()
             .allocation_size(mem_requirements.size)
@@ -86,7 +88,7 @@ impl Allocate for DefaultAllocator {
         let image = unsafe { device.create_image(&image_info, None)? };
         let mem_requirements = unsafe { device.get_image_memory_requirements(image) };
         let mem_type_index =
-            self.find_memory_type(mem_requirements, vk::MemoryPropertyFlags::DEVICE_LOCAL);
+            self.find_memory_type(mem_requirements, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
 
         let alloc_info = vk::MemoryAllocateInfo::builder()
             .allocation_size(mem_requirements.size)
