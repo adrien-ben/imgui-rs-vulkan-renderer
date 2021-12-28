@@ -2,6 +2,12 @@
 //!
 //! A Vulkan renderer for [imgui-rs][imgui-rs] using [Ash][ash].
 //!
+//! ## Compatibility
+//! 
+//! | crate | imgui | ash  | gpu-allocator |
+//! |-------|-------|------|---------------|
+//! | 1.0.0 | 0.8   | 0.35 | 0.14          |
+//! 
 //! ## How it works
 //!
 //! The renderer records drawing command to a command buffer supplied by the application. Here is a little breakdown of the features of this crate and how they work.

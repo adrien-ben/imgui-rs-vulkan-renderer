@@ -7,11 +7,9 @@ use ash::{
     },
     vk, Device, Entry, Instance,
 };
-use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use imgui::*;
 use imgui_rs_vulkan_renderer::*;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use std::sync::{Arc, Mutex};
 use std::{
     error::Error,
     ffi::{CStr, CString},
@@ -25,6 +23,11 @@ use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
+};
+#[cfg(feature = "gpu-allocator")]
+use {
+    gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc},
+    std::sync::{Arc, Mutex},
 };
 
 const WIDTH: u32 = 1024;
@@ -126,6 +129,7 @@ impl<A: App> System<A> {
         imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
         platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Rounded);
 
+        #[cfg(feature = "gpu-allocator")]
         let allocator = Allocator::new(&AllocatorCreateDesc {
             instance: vulkan_context.instance.clone(),
             device: vulkan_context.device.clone(),
@@ -134,6 +138,7 @@ impl<A: App> System<A> {
             buffer_device_address: false,
         })?;
 
+        #[cfg(feature = "gpu-allocator")]
         let renderer = Renderer::new(
             Arc::new(Mutex::new(allocator)),
             vulkan_context.device.clone(),
@@ -144,16 +149,17 @@ impl<A: App> System<A> {
             &mut imgui,
         )?;
 
-        // let renderer = Renderer::new(
-        //     &vulkan_context.instance,
-        //     vulkan_context.physical_device,
-        //     vulkan_context.device.clone(),
-        //     vulkan_context.graphics_queue,
-        //     vulkan_context.command_pool,
-        //     1,
-        //     swapchain.render_pass,
-        //     &mut imgui,
-        // )?;
+        #[cfg(not(feature = "gpu-allocator"))]
+        let renderer = Renderer::new(
+            &vulkan_context.instance,
+            vulkan_context.physical_device,
+            vulkan_context.device.clone(),
+            vulkan_context.graphics_queue,
+            vulkan_context.command_pool,
+            1,
+            swapchain.render_pass,
+            &mut imgui,
+        )?;
 
         Ok(Self {
             phantom_data: PhantomData,
@@ -397,7 +403,7 @@ pub struct VulkanContext {
 impl VulkanContext {
     pub fn new(window: &Window, name: &str) -> Result<Self, Box<dyn Error>> {
         // Vulkan instance
-        let entry = Entry::new();
+        let entry = Entry::linked();
         let (instance, debug_utils, debug_utils_messenger) =
             create_vulkan_instance(&entry, window, name)?;
 

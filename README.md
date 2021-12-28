@@ -13,7 +13,7 @@ A Vulkan renderer for [imgui-rs][imgui-rs] using [Ash][ash].
 
 | crate | imgui | ash  | gpu-allocator |
 |-------|-------|------|---------------|
-| 1.0.0 | 0.8   | 0.34 | 0.12          |
+| 1.0.0 | 0.8   | 0.35 | 0.14          |
 
 ## How it works
 
