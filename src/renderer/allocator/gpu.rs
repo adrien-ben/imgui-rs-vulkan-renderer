@@ -1,19 +1,26 @@
 use crate::{RendererError, RendererResult};
 use ash::{vk, Device};
 use gpu_allocator::{
-    vulkan::{Allocation, AllocationCreateDesc, Allocator},
+    vulkan::{Allocation, AllocationCreateDesc, Allocator as GpuAllocator},
     MemoryLocation,
 };
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::Allocate;
 
-pub struct GpuAllocator {
-    pub allocator: Arc<Mutex<Allocator>>,
+/// Abstraction over memory used by Vulkan resources.
+pub type Memory = Allocation;
+
+pub struct Allocator {
+    pub allocator: Arc<Mutex<GpuAllocator>>,
 }
 
-impl GpuAllocator {
-    fn get_allocator(&self) -> RendererResult<MutexGuard<Allocator>> {
+impl Allocator {
+    pub fn new(allocator: Arc<Mutex<gpu_allocator::vulkan::Allocator>>) -> Self {
+        Self { allocator }
+    }
+
+    fn get_allocator(&self) -> RendererResult<MutexGuard<GpuAllocator>> {
         self.allocator.lock().map_err(|e| {
             RendererError::Allocator(format!(
                 "Failed to acquire lock on allocator: {}",
@@ -23,8 +30,8 @@ impl GpuAllocator {
     }
 }
 
-impl Allocate for GpuAllocator {
-    type Memory = Allocation;
+impl Allocate for Allocator {
+    type Memory = Memory;
 
     fn create_buffer(
         &mut self,

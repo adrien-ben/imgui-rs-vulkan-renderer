@@ -134,7 +134,7 @@ impl<A: App> System<A> {
             buffer_device_address: false,
         })?;
 
-        let renderer = Renderer::with_gpu_allocator(
+        let renderer = Renderer::new(
             Arc::new(Mutex::new(allocator)),
             vulkan_context.device.clone(),
             vulkan_context.graphics_queue,

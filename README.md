@@ -46,7 +46,7 @@ Custom Vulkan allocators are not supported for the moment.
 
 ### gpu-allocator
 
-This feature adds support for gpu-allocator. It exposes `Renderer::with_gpu_allocator` which takes
+This feature adds support for gpu-allocator. It changes `Renderer::new` which now takes
 a `Arc<Mutex<gpu_allocator::vulkan::Allocator>>`. All internal allocator are then done using the allocator.
 
 > I'm still not sure with the `Arc<Mutex<...>>` stuff. It works for me but i'm unsure it'a the best way to go.

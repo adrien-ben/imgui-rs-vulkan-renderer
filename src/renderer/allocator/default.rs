@@ -3,11 +3,18 @@ use ash::{vk, Device};
 
 use super::Allocate;
 
-pub struct DefaultAllocator {
+/// Abstraction over memory used by Vulkan resources.
+pub type Memory = vk::DeviceMemory;
+
+pub struct Allocator {
     pub memory_properties: vk::PhysicalDeviceMemoryProperties,
 }
 
-impl DefaultAllocator {
+impl Allocator {
+    pub fn new(memory_properties: vk::PhysicalDeviceMemoryProperties) -> Self {
+        Self { memory_properties }
+    }
+
     fn find_memory_type(
         &self,
         requirements: vk::MemoryRequirements,
@@ -28,8 +35,8 @@ impl DefaultAllocator {
     }
 }
 
-impl Allocate for DefaultAllocator {
-    type Memory = vk::DeviceMemory;
+impl Allocate for Allocator {
+    type Memory = Memory;
 
     fn create_buffer(
         &mut self,

@@ -2,13 +2,16 @@ mod allocator;
 pub mod vulkan;
 
 use crate::RendererError;
-use ash::{vk, Device, Instance};
+use ash::{vk, Device};
 use imgui::{Context, DrawCmd, DrawCmdParams, DrawData, TextureId, Textures};
 use mesh::*;
 use ultraviolet::projection::orthographic_vk;
 use vulkan::*;
 
 use self::allocator::Allocator;
+
+#[cfg(not(feature = "gpu-allocator"))]
+use ash::Instance;
 
 #[cfg(feature = "gpu-allocator")]
 use {
@@ -68,6 +71,7 @@ impl Renderer {
     ///
     /// * [`RendererError`] - If the number of in flight frame in incorrect.
     /// * [`RendererError`] - If any Vulkan or io error is encountered during initialization.
+    #[cfg(not(feature = "gpu-allocator"))]
     pub fn new(
         instance: &Instance,
         physical_device: vk::PhysicalDevice,
@@ -85,7 +89,7 @@ impl Renderer {
             device,
             queue,
             command_pool,
-            Allocator::defaut(memory_properties),
+            Allocator::new(memory_properties),
             in_flight_frames,
             render_pass,
             imgui,
@@ -99,7 +103,7 @@ impl Renderer {
     ///
     /// # Arguments
     ///
-    /// * `gpu_allocator` - The allocator that will be used to allocator buffer and iamge memory.
+    /// * `gpu_allocator` - The allocator that will be used to allocator buffer and image memory.
     /// * `device` - A Vulkan device.
     /// * `queue` - A Vulkan queue.
     ///             It will be used to submit commands during initialization to upload
@@ -116,7 +120,7 @@ impl Renderer {
     /// * [`RendererError`] - If the number of in flight frame in incorrect.
     /// * [`RendererError`] - If any Vulkan or io error is encountered during initialization.
     #[cfg(feature = "gpu-allocator")]
-    pub fn with_gpu_allocator(
+    pub fn new(
         gpu_allocator: Arc<Mutex<GpuAllocator>>, // TODO: Another way ?
         device: Device,
         queue: vk::Queue,
@@ -129,7 +133,7 @@ impl Renderer {
             device,
             queue,
             command_pool,
-            Allocator::gpu(gpu_allocator),
+            Allocator::new(gpu_allocator),
             in_flight_frames,
             render_pass,
             imgui,
