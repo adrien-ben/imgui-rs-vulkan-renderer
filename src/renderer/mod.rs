@@ -264,6 +264,69 @@ impl Renderer {
         }
     }
 
+    /// Update the fonts texture after having added new fonts to imgui.
+    ///
+    /// # Arguments
+    ///
+    /// * `queue` - A Vulkan queue.
+    ///             It will be used to submit commands during initialization to upload
+    ///             data to the gpu. The type of queue must be supported by the following
+    ///             commands: [vkCmdCopyBufferToImage](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html),
+    ///             [vkCmdPipelineBarrier](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPipelineBarrier.html)
+    /// * `command_pool` - A Vulkan command pool used to allocate command buffers to upload textures to the gpu.
+    /// * `imgui` - The imgui context.
+    ///
+    /// # Errors
+    ///
+    /// * [`RendererError`] - If any error is encountered during texture update.
+    pub fn update_fonts_texture(
+        &mut self,
+        queue: vk::Queue,
+        command_pool: vk::CommandPool,
+        imgui: &mut Context,
+    ) -> RendererResult<()> {
+        // Generate the new fonts texture
+        let fonts_texture = {
+            let mut fonts = imgui.fonts();
+            let atlas_texture = fonts.build_rgba32_texture();
+
+            Texture::from_rgba8(
+                &self.device,
+                queue,
+                command_pool,
+                &mut self.allocator,
+                atlas_texture.width,
+                atlas_texture.height,
+                atlas_texture.data,
+            )?
+        };
+
+        let mut fonts = imgui.fonts();
+        fonts.tex_id = TextureId::from(usize::MAX);
+
+        // Free Descriptor set the create a new one
+        let old_descriptor_set = self.descriptor_set;
+        unsafe {
+            self.device
+                .free_descriptor_sets(self.descriptor_pool, &[old_descriptor_set])?
+        };
+        self.descriptor_set = create_vulkan_descriptor_set(
+            &self.device,
+            self.descriptor_set_layout,
+            self.descriptor_pool,
+            fonts_texture.image_view,
+            fonts_texture.sampler,
+        )?;
+
+        // Free old fonts texture
+        let mut old_texture = self.fonts_texture.replace(fonts_texture);
+        if let Some(texture) = old_texture.take() {
+            texture.destroy(&self.device, &mut self.allocator)?;
+        }
+
+        Ok(())
+    }
+
     /// Record commands required to render the gui.RendererError.
     ///
     /// # Arguments

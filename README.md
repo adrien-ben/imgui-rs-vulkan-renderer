@@ -80,12 +80,21 @@ cargo run --example <example>
 # - collapsing_header
 # - color_button
 # - custom_textures
+# - disablement
+# - draw_list
 # - hello_world
+# - keyboard
+# - long_list
+# - multiple fonts
 # - progress_bar
 # - radio_button
+# - slider : TODO: crashes
+# - tables_api
 # - test_drawing_channels_split
 # - test_window_impl
 # - test_window
+# - text_callbacks
+# - text_input
 ```
 
 [imgui-rs]: https://github.com/Gekkio/imgui-rs

@@ -52,7 +52,8 @@ pub struct System<A: App + 'static> {
     render_finished_semaphore: vk::Semaphore,
     fence: vk::Fence,
 
-    imgui: Context,
+    pub imgui: Context,
+    pub font_size: f32,
     platform: WinitPlatform,
     pub renderer: Renderer,
 }
@@ -172,9 +173,21 @@ impl<A: App> System<A> {
             render_finished_semaphore,
             fence,
             imgui,
+            font_size,
             platform,
             renderer,
         })
+    }
+
+    #[allow(dead_code)]
+    pub fn update_fonts_texture(&mut self) -> Result<(), Box<dyn Error>> {
+        self.renderer.update_fonts_texture(
+            self.vulkan_context.graphics_queue,
+            self.vulkan_context.command_pool,
+            &mut self.imgui,
+        )?;
+
+        Ok(())
     }
 
     pub fn run<B>(self, mut app: A, mut ui_builder: B) -> Result<(), Box<dyn Error>>

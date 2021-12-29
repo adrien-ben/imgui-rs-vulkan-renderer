@@ -28,6 +28,7 @@ gpu-allocator = { version = "0.14", default-features = false, features = ["vulka
 [dev-dependencies]
 simple_logger = "1.11"
 winit = "0.26.0"
+imgui = { version = "^0.8", features = ["tables-api"] }
 imgui-winit-support = { version = "^0.8", default-features = false, features = ["winit-26"] }
 ash = { version = "0.35", default-features = false, features = ["debug", "linked"] }
 ash-window = "0.9"

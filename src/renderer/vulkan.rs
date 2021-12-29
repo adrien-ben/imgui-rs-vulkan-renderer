@@ -216,7 +216,8 @@ pub fn create_vulkan_descriptor_pool(
     }];
     let create_info = vk::DescriptorPoolCreateInfo::builder()
         .pool_sizes(&sizes)
-        .max_sets(max_sets);
+        .max_sets(max_sets)
+        .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET);
     unsafe { Ok(device.create_descriptor_pool(&create_info, None)?) }
 }
 
