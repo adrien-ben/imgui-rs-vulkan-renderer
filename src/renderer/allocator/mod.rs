@@ -1,7 +1,7 @@
-#[cfg(not(feature = "gpu-allocator"))]
+#[cfg(not(any(feature = "gpu-allocator", feature = "vk-mem")))]
 mod default;
 
-#[cfg(not(feature = "gpu-allocator"))]
+#[cfg(not(any(feature = "gpu-allocator", feature = "vk-mem")))]
 pub use self::default::{Allocator, Memory};
 
 #[cfg(feature = "gpu-allocator")]
@@ -9,6 +9,12 @@ mod gpu;
 
 #[cfg(feature = "gpu-allocator")]
 pub use self::gpu::{Allocator, Memory};
+
+#[cfg(feature = "vk-mem")]
+mod vkmem;
+
+#[cfg(feature = "vk-mem")]
+pub use self::vkmem::{Allocator, Memory};
 
 use crate::RendererResult;
 use ash::{vk, Device};

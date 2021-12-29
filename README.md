@@ -46,8 +46,13 @@ Custom Vulkan allocators are not supported for the moment.
 
 ### gpu-allocator
 
-This feature adds support for gpu-allocator. It changes `Renderer::new` which now takes
+This feature adds support for [gpu-allocator][gpu-allocator]. It changes `Renderer::new` which now takes
 a `Arc<Mutex<gpu_allocator::vulkan::Allocator>>`. All internal allocator are then done using the allocator.
+
+### vk-mem
+
+This feature adds support for [vk-mem-rs][vk-mem-rs]. It changes `Renderer::new` which now takes
+a `Arc<Mutex<vk_mem::Allocator>>`. All internal allocator are then done using the allocator.
 
 > I'm still not sure with the `Arc<Mutex<...>>` stuff. It works for me but i'm unsure it'a the best way to go.
 > Any suggestion is welcome.
@@ -100,3 +105,4 @@ cargo run --example <example>
 [imgui-rs]: https://github.com/Gekkio/imgui-rs
 [ash]: https://github.com/MaikKlein/ash
 [gpu-allocator]: https://github.com/Traverse-Research/gpu-allocator
+[vk-mem-rs]: https://github.com/adrien-ben/vk-mem-rs

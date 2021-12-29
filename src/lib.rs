@@ -41,6 +41,11 @@
 //!
 //! This feature adds support for gpu-allocator. It changes `Renderer::new` which now takes
 //! a `Arc<Mutex<gpu_allocator::vulkan::Allocator>>`. All internal allocator are then done using the allocator.
+//! 
+//! ### vk-mem
+//! 
+//! This feature adds support for [vk-mem-rs][vk-mem-rs]. It adds `Renderer::with_vk_mem_allocator` which takes
+//! a `Arc<Mutex<vk_mem::Allocator>>`. All internal allocator are then done using the allocator.
 //!
 //! ## Integration
 //!

@@ -10,13 +10,19 @@ use vulkan::*;
 
 use self::allocator::Allocator;
 
-#[cfg(not(feature = "gpu-allocator"))]
+#[cfg(not(any(feature = "gpu-allocator", feature = "vk-mem")))]
 use ash::Instance;
 
 #[cfg(feature = "gpu-allocator")]
 use {
     gpu_allocator::vulkan::Allocator as GpuAllocator,
     std::sync::{Arc, Mutex},
+};
+
+#[cfg(feature = "vk-mem")]
+use {
+    std::sync::{Arc, Mutex},
+    vk_mem::Allocator as VkMemAllocator,
 };
 
 /// Convenient return type for function that can return a [`RendererError`].
@@ -71,7 +77,7 @@ impl Renderer {
     ///
     /// * [`RendererError`] - If the number of in flight frame in incorrect.
     /// * [`RendererError`] - If any Vulkan or io error is encountered during initialization.
-    #[cfg(not(feature = "gpu-allocator"))]
+    #[cfg(not(any(feature = "gpu-allocator", feature = "vk-mem")))]
     pub fn new(
         instance: &Instance,
         physical_device: vk::PhysicalDevice,
@@ -134,6 +140,50 @@ impl Renderer {
             queue,
             command_pool,
             Allocator::new(gpu_allocator),
+            in_flight_frames,
+            render_pass,
+            imgui,
+        )
+    }
+
+    /// Initialize and return a new instance of the renderer.
+    ///
+    /// At initialization all Vulkan resources are initialized and font texture is created and
+    /// uploaded to the gpu. Vertex and index buffers are not created yet.
+    ///
+    /// # Arguments
+    ///
+    /// * `vk_mem_allocator` - The allocator that will be used to allocator buffer and image memory.
+    /// * `device` - A Vulkan device.
+    /// * `queue` - A Vulkan queue.
+    ///             It will be used to submit commands during initialization to upload
+    ///             data to the gpu. The type of queue must be supported by the following
+    ///             commands: [vkCmdCopyBufferToImage](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html),
+    ///             [vkCmdPipelineBarrier](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPipelineBarrier.html)
+    /// * `command_pool` - A Vulkan command pool used to allocate command buffers to upload textures to the gpu.
+    /// * `in_flight_frames` - The number of in flight frames of the application.
+    /// * `render_pass` - The render pass used to render the gui.
+    /// * `imgui` - The imgui context.
+    ///
+    /// # Errors
+    ///
+    /// * [`RendererError`] - If the number of in flight frame in incorrect.
+    /// * [`RendererError`] - If any Vulkan or io error is encountered during initialization.
+    #[cfg(feature = "vk-mem")]
+    pub fn new(
+        vk_mem_allocator: Arc<Mutex<VkMemAllocator>>, // TODO: Another way ?
+        device: Device,
+        queue: vk::Queue,
+        command_pool: vk::CommandPool,
+        in_flight_frames: usize,
+        render_pass: vk::RenderPass,
+        imgui: &mut Context,
+    ) -> RendererResult<Self> {
+        Self::from_allocator(
+            device,
+            queue,
+            command_pool,
+            Allocator::new(vk_mem_allocator),
             in_flight_frames,
             render_pass,
             imgui,
@@ -474,7 +524,12 @@ impl Renderer {
                             )
                         };
                     }
-                    _ => (), // Ignored for now
+                    DrawCmd::ResetRenderState => {
+                        log::trace!("Reset render state command not yet supported")
+                    }
+                    DrawCmd::RawCallback { .. } => {
+                        log::trace!("Raw callback command not yet supported")
+                    }
                 }
             }
 

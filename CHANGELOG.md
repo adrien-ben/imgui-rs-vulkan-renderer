@@ -5,7 +5,6 @@
 - Rework API:
     - Remove the trait `RendererVkContext` so no need to pass a ref to each method.
     - Remove `Renderer::destroy` and implement `Drop`.
-- Remove [vk-mem-rs](https://github.com/gwihlidal/vk-mem-rs) support (crate does not seem to be supported anymore). Might be back if requested.
 - Add [`gpu-allocator`](https://github.com/Traverse-Research/gpu-allocator) support.
 - Add multiple font support with `Renderer::update_fonts_texture`.
 - Bump dependencies:

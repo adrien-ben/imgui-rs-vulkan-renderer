@@ -29,6 +29,11 @@ use {
     gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc},
     std::sync::{Arc, Mutex},
 };
+#[cfg(feature = "vk-mem")]
+use {
+    std::sync::{Arc, Mutex},
+    vk_mem::{Allocator, AllocatorCreateFlags, AllocatorCreateInfo},
+};
 
 const WIDTH: u32 = 1024;
 const HEIGHT: u32 = 768;
@@ -131,26 +136,53 @@ impl<A: App> System<A> {
         platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Rounded);
 
         #[cfg(feature = "gpu-allocator")]
-        let allocator = Allocator::new(&AllocatorCreateDesc {
-            instance: vulkan_context.instance.clone(),
-            device: vulkan_context.device.clone(),
-            physical_device: vulkan_context.physical_device,
-            debug_settings: Default::default(),
-            buffer_device_address: false,
-        })?;
+        let renderer = {
+            let allocator = Allocator::new(&AllocatorCreateDesc {
+                instance: vulkan_context.instance.clone(),
+                device: vulkan_context.device.clone(),
+                physical_device: vulkan_context.physical_device,
+                debug_settings: Default::default(),
+                buffer_device_address: false,
+            })?;
 
-        #[cfg(feature = "gpu-allocator")]
-        let renderer = Renderer::new(
-            Arc::new(Mutex::new(allocator)),
-            vulkan_context.device.clone(),
-            vulkan_context.graphics_queue,
-            vulkan_context.command_pool,
-            1,
-            swapchain.render_pass,
-            &mut imgui,
-        )?;
+            Renderer::new(
+                Arc::new(Mutex::new(allocator)),
+                vulkan_context.device.clone(),
+                vulkan_context.graphics_queue,
+                vulkan_context.command_pool,
+                1,
+                swapchain.render_pass,
+                &mut imgui,
+            )?
+        };
 
-        #[cfg(not(feature = "gpu-allocator"))]
+        #[cfg(feature = "vk-mem")]
+        let renderer = {
+            let allocator = {
+                let allocator_create_info = AllocatorCreateInfo {
+                    physical_device: vulkan_context.physical_device,
+                    device: vulkan_context.device.clone(),
+                    instance: vulkan_context.instance.clone(),
+                    flags: AllocatorCreateFlags::NONE,
+                    preferred_large_heap_block_size: 0,
+                    frame_in_use_count: 0,
+                    heap_size_limits: None,
+                };
+                Allocator::new(&allocator_create_info)?
+            };
+
+            Renderer::new(
+                Arc::new(Mutex::new(allocator)),
+                vulkan_context.device.clone(),
+                vulkan_context.graphics_queue,
+                vulkan_context.command_pool,
+                1,
+                swapchain.render_pass,
+                &mut imgui,
+            )?
+        };
+
+        #[cfg(not(any(feature = "gpu-allocator", feature = "vk-mem")))]
         let renderer = Renderer::new(
             &vulkan_context.instance,
             vulkan_context.physical_device,
