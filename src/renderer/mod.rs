@@ -78,7 +78,7 @@ impl Renderer {
     /// * [`RendererError`] - If the number of in flight frame in incorrect.
     /// * [`RendererError`] - If any Vulkan or io error is encountered during initialization.
     #[cfg(not(any(feature = "gpu-allocator", feature = "vk-mem")))]
-    pub fn new(
+    pub fn with_default_allocator(
         instance: &Instance,
         physical_device: vk::PhysicalDevice,
         device: Device,
@@ -126,7 +126,7 @@ impl Renderer {
     /// * [`RendererError`] - If the number of in flight frame in incorrect.
     /// * [`RendererError`] - If any Vulkan or io error is encountered during initialization.
     #[cfg(feature = "gpu-allocator")]
-    pub fn new(
+    pub fn with_gpu_allocator(
         gpu_allocator: Arc<Mutex<GpuAllocator>>, // TODO: Another way ?
         device: Device,
         queue: vk::Queue,
@@ -170,7 +170,7 @@ impl Renderer {
     /// * [`RendererError`] - If the number of in flight frame in incorrect.
     /// * [`RendererError`] - If any Vulkan or io error is encountered during initialization.
     #[cfg(feature = "vk-mem")]
-    pub fn new(
+    pub fn with_vk_mem_allocator(
         vk_mem_allocator: Arc<Mutex<VkMemAllocator>>, // TODO: Another way ?
         device: Device,
         queue: vk::Queue,

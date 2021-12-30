@@ -145,7 +145,7 @@ impl<A: App> System<A> {
                 buffer_device_address: false,
             })?;
 
-            Renderer::new(
+            Renderer::with_gpu_allocator(
                 Arc::new(Mutex::new(allocator)),
                 vulkan_context.device.clone(),
                 vulkan_context.graphics_queue,
@@ -171,7 +171,7 @@ impl<A: App> System<A> {
                 Allocator::new(&allocator_create_info)?
             };
 
-            Renderer::new(
+            Renderer::with_vk_mem_allocator(
                 Arc::new(Mutex::new(allocator)),
                 vulkan_context.device.clone(),
                 vulkan_context.graphics_queue,
@@ -183,7 +183,7 @@ impl<A: App> System<A> {
         };
 
         #[cfg(not(any(feature = "gpu-allocator", feature = "vk-mem")))]
-        let renderer = Renderer::new(
+        let renderer = Renderer::with_default_allocator(
             &vulkan_context.instance,
             vulkan_context.physical_device,
             vulkan_context.device.clone(),

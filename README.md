@@ -11,9 +11,9 @@ A Vulkan renderer for [imgui-rs][imgui-rs] using [Ash][ash].
 
 ## Compatibility
 
-| crate | imgui | ash  | gpu-allocator |
-|-------|-------|------|---------------|
-| 1.0.0 | 0.8   | 0.35 | 0.14          |
+| crate | imgui | ash  | gpu-allocator (feature) | vk-mem (feature)                |
+|-------|-------|------|-------------------------|---------------------------------|
+| 1.0.0 | 0.8   | 0.35 | 0.14                    | 0.2.3 ([forked][forked-mem-rs]) |
 
 ## How it works
 
@@ -46,12 +46,12 @@ Custom Vulkan allocators are not supported for the moment.
 
 ### gpu-allocator
 
-This feature adds support for [gpu-allocator][gpu-allocator]. It changes `Renderer::new` which now takes
+This feature adds support for [gpu-allocator][gpu-allocator]. It adds `Renderer::with_gpu_allocator` which takes
 a `Arc<Mutex<gpu_allocator::vulkan::Allocator>>`. All internal allocator are then done using the allocator.
 
 ### vk-mem
 
-This feature adds support for [vk-mem-rs][vk-mem-rs]. It changes `Renderer::new` which now takes
+This feature adds support for [vk-mem-rs][vk-mem-rs]. It adds `Renderer::with_vk_mem_allocator` which takes
 a `Arc<Mutex<vk_mem::Allocator>>`. All internal allocator are then done using the allocator.
 
 > I'm still not sure with the `Arc<Mutex<...>>` stuff. It works for me but i'm unsure it'a the best way to go.
@@ -106,3 +106,4 @@ cargo run --example <example>
 [ash]: https://github.com/MaikKlein/ash
 [gpu-allocator]: https://github.com/Traverse-Research/gpu-allocator
 [vk-mem-rs]: https://github.com/adrien-ben/vk-mem-rs
+[forked-mem-rs]: https://github.com/adrien-ben/vk-mem-rs/tree/0.2.3-ash-0.35
