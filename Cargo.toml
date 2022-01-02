@@ -25,8 +25,11 @@ ultraviolet = "0.8"
 
 gpu-allocator = { version = "0.14", default-features = false, features = ["vulkan"], optional = true }
 
+vk-mem = { version = "0.2", optional = true }
+
+[patch.crates-io]
 # Forked version for ash compatibility. Original repo is not maintained anymore.
-vk-mem = { git = "https://github.com/adrien-ben/vk-mem-rs", tag = "0.2.3-ash-0.35", optional = true }
+vk-mem = { git = "https://github.com/adrien-ben/vk-mem-rs", tag = "0.2.3-ash-0.35" }
 
 [dev-dependencies]
 simple_logger = "1.11"
