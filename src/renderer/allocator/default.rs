@@ -1,59 +1,62 @@
-use crate::{RendererResult, RendererVkContext};
-use ash::version::{DeviceV1_0, InstanceV1_0};
-use ash::vk;
+use crate::{RendererError, RendererResult};
+use ash::{vk, Device};
 
-use super::{AllocatorTrait, Memory};
+use super::Allocate;
 
-pub struct DefaultAllocator;
+/// Abstraction over memory used by Vulkan resources.
+pub type Memory = vk::DeviceMemory;
 
-impl DefaultAllocator {
-    pub fn find_memory_type(
+pub struct Allocator {
+    pub memory_properties: vk::PhysicalDeviceMemoryProperties,
+}
+
+impl Allocator {
+    pub fn new(memory_properties: vk::PhysicalDeviceMemoryProperties) -> Self {
+        Self { memory_properties }
+    }
+
+    fn find_memory_type(
+        &self,
         requirements: vk::MemoryRequirements,
-        mem_properties: vk::PhysicalDeviceMemoryProperties,
         required_properties: vk::MemoryPropertyFlags,
-    ) -> u32 {
-        for i in 0..mem_properties.memory_type_count {
+    ) -> RendererResult<u32> {
+        for i in 0..self.memory_properties.memory_type_count {
             if requirements.memory_type_bits & (1 << i) != 0
-                && mem_properties.memory_types[i as usize]
+                && self.memory_properties.memory_types[i as usize]
                     .property_flags
                     .contains(required_properties)
             {
-                return i;
+                return Ok(i);
             }
         }
-        panic!("Failed to find suitable memory type.")
+        Err(RendererError::Allocator(
+            "Failed to find suitable memory type.".into(),
+        ))
     }
 }
 
-impl AllocatorTrait for DefaultAllocator {
-    fn create_buffer<C: RendererVkContext>(
-        &self,
-        vk_context: &C,
+impl Allocate for Allocator {
+    type Memory = Memory;
+
+    fn create_buffer(
+        &mut self,
+        device: &Device,
         size: usize,
         usage: vk::BufferUsageFlags,
-    ) -> RendererResult<(vk::Buffer, Memory)> {
-        let memory_properties = unsafe {
-            vk_context
-                .instance()
-                .get_physical_device_memory_properties(vk_context.physical_device())
-        };
-
+    ) -> RendererResult<(vk::Buffer, Self::Memory)> {
         let buffer_info = vk::BufferCreateInfo::builder()
             .size(size as _)
             .usage(usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .build();
 
-        let device = vk_context.device();
-
         let buffer = unsafe { device.create_buffer(&buffer_info, None)? };
 
         let mem_requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
-        let mem_type = Self::find_memory_type(
+        let mem_type = self.find_memory_type(
             mem_requirements,
-            memory_properties,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        );
+        )?;
 
         let alloc_info = vk::MemoryAllocateInfo::builder()
             .allocation_size(mem_requirements.size)
@@ -61,15 +64,15 @@ impl AllocatorTrait for DefaultAllocator {
         let memory = unsafe { device.allocate_memory(&alloc_info, None)? };
         unsafe { device.bind_buffer_memory(buffer, memory, 0)? };
 
-        Ok((buffer, Memory::DeviceMemory(memory)))
+        Ok((buffer, memory))
     }
 
-    fn create_image<C: RendererVkContext>(
-        &self,
-        vk_context: &C,
+    fn create_image(
+        &mut self,
+        device: &Device,
         width: u32,
         height: u32,
-    ) -> RendererResult<(vk::Image, Memory)> {
+    ) -> RendererResult<(vk::Image, Self::Memory)> {
         let extent = vk::Extent3D {
             width,
             height,
@@ -89,19 +92,10 @@ impl AllocatorTrait for DefaultAllocator {
             .samples(vk::SampleCountFlags::TYPE_1)
             .flags(vk::ImageCreateFlags::empty());
 
-        let device = vk_context.device();
         let image = unsafe { device.create_image(&image_info, None)? };
         let mem_requirements = unsafe { device.get_image_memory_requirements(image) };
-        let memory_properties = unsafe {
-            vk_context
-                .instance()
-                .get_physical_device_memory_properties(vk_context.physical_device())
-        };
-        let mem_type_index = Self::find_memory_type(
-            mem_requirements,
-            memory_properties,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        );
+        let mem_type_index =
+            self.find_memory_type(mem_requirements, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
 
         let alloc_info = vk::MemoryAllocateInfo::builder()
             .allocation_size(mem_requirements.size)
@@ -112,6 +106,51 @@ impl AllocatorTrait for DefaultAllocator {
             mem
         };
 
-        Ok((image, Memory::DeviceMemory(memory)))
+        Ok((image, memory))
+    }
+
+    fn destroy_buffer(
+        &mut self,
+        device: &Device,
+        buffer: vk::Buffer,
+        memory: Self::Memory,
+    ) -> RendererResult<()> {
+        unsafe {
+            device.destroy_buffer(buffer, None);
+            device.free_memory(memory, None);
+        }
+
+        Ok(())
+    }
+
+    fn destroy_image(
+        &mut self,
+        device: &Device,
+        image: vk::Image,
+        memory: Self::Memory,
+    ) -> RendererResult<()> {
+        unsafe {
+            device.destroy_image(image, None);
+            device.free_memory(memory, None);
+        }
+
+        Ok(())
+    }
+
+    fn update_buffer<T: Copy>(
+        &mut self,
+        device: &Device,
+        memory: &Self::Memory,
+        data: &[T],
+    ) -> RendererResult<()> {
+        let size = (data.len() * std::mem::size_of::<T>()) as _;
+        unsafe {
+            let data_ptr = device.map_memory(*memory, 0, size, vk::MemoryMapFlags::empty())?;
+            let mut align = ash::util::Align::new(data_ptr, std::mem::align_of::<T>() as _, size);
+            align.copy_from_slice(data);
+            device.unmap_memory(*memory);
+        }
+
+        Ok(())
     }
 }

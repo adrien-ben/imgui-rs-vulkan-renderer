@@ -5,7 +5,6 @@ use ash::{
         ext::DebugUtils,
         khr::{Surface, Swapchain as SwapchainLoader},
     },
-    version::{DeviceV1_0, EntryV1_0, InstanceV1_0},
     vk, Device, Entry, Instance,
 };
 use imgui::*;
@@ -18,13 +17,22 @@ use std::{
     os::raw::c_void,
     time::Instant,
 };
-use vk_mem::{AllocatorCreateFlags, AllocatorCreateInfo};
 pub use vulkan::*;
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
+};
+#[cfg(feature = "gpu-allocator")]
+use {
+    gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc},
+    std::sync::{Arc, Mutex},
+};
+#[cfg(feature = "vk-mem")]
+use {
+    std::sync::{Arc, Mutex},
+    vk_mem::{Allocator, AllocatorCreateFlags, AllocatorCreateInfo},
 };
 
 const WIDTH: u32 = 1024;
@@ -49,7 +57,8 @@ pub struct System<A: App + 'static> {
     render_finished_semaphore: vk::Semaphore,
     fence: vk::Fence,
 
-    imgui: Context,
+    pub imgui: Context,
+    pub font_size: f32,
     platform: WinitPlatform,
     pub renderer: Renderer,
 }
@@ -126,8 +135,64 @@ impl<A: App> System<A> {
         imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
         platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Rounded);
 
-        let renderer =
-            Renderer::with_vk_mem_allocator(&vulkan_context, 1, swapchain.render_pass, &mut imgui)?;
+        #[cfg(feature = "gpu-allocator")]
+        let renderer = {
+            let allocator = Allocator::new(&AllocatorCreateDesc {
+                instance: vulkan_context.instance.clone(),
+                device: vulkan_context.device.clone(),
+                physical_device: vulkan_context.physical_device,
+                debug_settings: Default::default(),
+                buffer_device_address: false,
+            })?;
+
+            Renderer::with_gpu_allocator(
+                Arc::new(Mutex::new(allocator)),
+                vulkan_context.device.clone(),
+                vulkan_context.graphics_queue,
+                vulkan_context.command_pool,
+                1,
+                swapchain.render_pass,
+                &mut imgui,
+            )?
+        };
+
+        #[cfg(feature = "vk-mem")]
+        let renderer = {
+            let allocator = {
+                let allocator_create_info = AllocatorCreateInfo {
+                    physical_device: vulkan_context.physical_device,
+                    device: vulkan_context.device.clone(),
+                    instance: vulkan_context.instance.clone(),
+                    flags: AllocatorCreateFlags::NONE,
+                    preferred_large_heap_block_size: 0,
+                    frame_in_use_count: 0,
+                    heap_size_limits: None,
+                };
+                Allocator::new(&allocator_create_info)?
+            };
+
+            Renderer::with_vk_mem_allocator(
+                Arc::new(Mutex::new(allocator)),
+                vulkan_context.device.clone(),
+                vulkan_context.graphics_queue,
+                vulkan_context.command_pool,
+                1,
+                swapchain.render_pass,
+                &mut imgui,
+            )?
+        };
+
+        #[cfg(not(any(feature = "gpu-allocator", feature = "vk-mem")))]
+        let renderer = Renderer::with_default_allocator(
+            &vulkan_context.instance,
+            vulkan_context.physical_device,
+            vulkan_context.device.clone(),
+            vulkan_context.graphics_queue,
+            vulkan_context.command_pool,
+            1,
+            swapchain.render_pass,
+            &mut imgui,
+        )?;
 
         Ok(Self {
             phantom_data: PhantomData,
@@ -140,9 +205,21 @@ impl<A: App> System<A> {
             render_finished_semaphore,
             fence,
             imgui,
+            font_size,
             platform,
             renderer,
         })
+    }
+
+    #[allow(dead_code)]
+    pub fn update_fonts_texture(&mut self) -> Result<(), Box<dyn Error>> {
+        self.renderer.update_fonts_texture(
+            self.vulkan_context.graphics_queue,
+            self.vulkan_context.command_pool,
+            &mut self.imgui,
+        )?;
+
+        Ok(())
     }
 
     pub fn run<B>(self, mut app: A, mut ui_builder: B) -> Result<(), Box<dyn Error>>
@@ -172,6 +249,8 @@ impl<A: App> System<A> {
 
         // Main loop
         event_loop.run(move |event, _, control_flow| {
+            let mut renderer = &mut renderer; // Makes sure Renderer is moved before VulkanContext and therefore dropped before
+
             *control_flow = ControlFlow::Poll;
 
             platform.handle_event(imgui.io_mut(), &window, &event);
@@ -193,7 +272,7 @@ impl<A: App> System<A> {
                                 .recreate(&vulkan_context)
                                 .expect("Failed to recreate swapchain");
                             renderer
-                                .set_render_pass(&vulkan_context, swapchain.render_pass)
+                                .set_render_pass(swapchain.render_pass)
                                 .expect("Failed to rebuild renderer pipeline");
                             dirty_swapchain = false;
                         } else {
@@ -252,7 +331,8 @@ impl<A: App> System<A> {
 
                     // Re-record commands to draw geometry
                     record_command_buffers(
-                        &vulkan_context,
+                        &vulkan_context.device,
+                        vulkan_context.command_pool,
                         command_buffer,
                         swapchain.framebuffers[image_index as usize],
                         swapchain.render_pass,
@@ -324,9 +404,6 @@ impl<A: App> System<A> {
 
                         app.destroy(&vulkan_context);
 
-                        renderer
-                            .destroy(&vulkan_context)
-                            .expect("Failed to destroy renderer.");
                         vulkan_context.device.destroy_fence(fence, None);
                         vulkan_context
                             .device
@@ -354,25 +431,24 @@ impl<A: App> System<A> {
 
 pub struct VulkanContext {
     _entry: Entry,
-    instance: Instance,
+    pub instance: Instance,
     debug_utils: DebugUtils,
     debug_utils_messenger: vk::DebugUtilsMessengerEXT,
     surface: Surface,
     surface_khr: vk::SurfaceKHR,
-    physical_device: vk::PhysicalDevice,
+    pub physical_device: vk::PhysicalDevice,
     graphics_q_index: u32,
     present_q_index: u32,
-    device: Device,
-    graphics_queue: vk::Queue,
+    pub device: Device,
+    pub graphics_queue: vk::Queue,
     present_queue: vk::Queue,
-    command_pool: vk::CommandPool,
-    vk_mem_allocator: vk_mem::Allocator,
+    pub command_pool: vk::CommandPool,
 }
 
 impl VulkanContext {
     pub fn new(window: &Window, name: &str) -> Result<Self, Box<dyn Error>> {
         // Vulkan instance
-        let entry = unsafe { Entry::new()? };
+        let entry = Entry::linked();
         let (instance, debug_utils, debug_utils_messenger) =
             create_vulkan_instance(&entry, window, name)?;
 
@@ -405,20 +481,6 @@ impl VulkanContext {
             unsafe { device.create_command_pool(&command_pool_info, None)? }
         };
 
-        // VkMem allocator
-        let vk_mem_allocator = {
-            let allocator_create_info = AllocatorCreateInfo {
-                physical_device: physical_device,
-                device: device.clone(),
-                instance: instance.clone(),
-                flags: AllocatorCreateFlags::NONE,
-                preferred_large_heap_block_size: 0,
-                frame_in_use_count: 0,
-                heap_size_limits: None,
-            };
-            vk_mem::Allocator::new(&allocator_create_info)?
-        };
-
         Ok(Self {
             _entry: entry,
             instance,
@@ -433,41 +495,14 @@ impl VulkanContext {
             graphics_queue,
             present_queue,
             command_pool,
-            vk_mem_allocator,
         })
-    }
-}
-
-impl RendererVkContext for VulkanContext {
-    fn instance(&self) -> &Instance {
-        &self.instance
-    }
-
-    fn physical_device(&self) -> vk::PhysicalDevice {
-        self.physical_device
-    }
-
-    fn device(&self) -> &Device {
-        &self.device
-    }
-
-    fn queue(&self) -> vk::Queue {
-        self.graphics_queue
-    }
-
-    fn command_pool(&self) -> vk::CommandPool {
-        self.command_pool
-    }
-
-    fn vk_mem_allocator(&self) -> &vk_mem::Allocator {
-        &self.vk_mem_allocator
     }
 }
 
 impl Drop for VulkanContext {
     fn drop(&mut self) {
+        log::debug!("Destroying Vulkan Context");
         unsafe {
-            self.vk_mem_allocator.destroy();
             self.device.destroy_command_pool(self.command_pool, None);
             self.device.destroy_device(None);
             self.surface.destroy_surface(self.surface_khr, None);
@@ -582,10 +617,10 @@ fn create_vulkan_instance(
     let engine_name = CString::new("No Engine")?;
     let app_info = vk::ApplicationInfo::builder()
         .application_name(app_name.as_c_str())
-        .application_version(vk::make_version(0, 1, 0))
+        .application_version(vk::make_api_version(0, 0, 1, 0))
         .engine_name(engine_name.as_c_str())
-        .engine_version(vk::make_version(0, 1, 0))
-        .api_version(vk::make_version(1, 0, 0));
+        .engine_version(vk::make_api_version(0, 0, 1, 0))
+        .api_version(vk::make_api_version(0, 1, 0, 0));
 
     let extension_names = ash_window::enumerate_required_extensions(window)?;
     let mut extension_names = extension_names
@@ -602,9 +637,18 @@ fn create_vulkan_instance(
 
     // Vulkan debug report
     let create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
-        .flags(vk::DebugUtilsMessengerCreateFlagsEXT::all())
-        .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
-        .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
+        .flags(vk::DebugUtilsMessengerCreateFlagsEXT::empty())
+        .message_severity(
+            vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+                | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
+                | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
+        )
+        .message_type(
+            vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
+                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
+        )
         .pfn_user_callback(Some(vulkan_debug_callback));
     let debug_utils = DebugUtils::new(entry, &instance);
     let debug_utils_messenger =
@@ -964,8 +1008,9 @@ fn create_vulkan_framebuffers(
         .collect::<Result<Vec<_>, _>>()?)
 }
 
-fn record_command_buffers<C: RendererVkContext>(
-    vk_context: &C,
+fn record_command_buffers(
+    device: &Device,
+    command_pool: vk::CommandPool,
     command_buffer: vk::CommandBuffer,
     framebuffer: vk::Framebuffer,
     render_pass: vk::RenderPass,
@@ -973,20 +1018,11 @@ fn record_command_buffers<C: RendererVkContext>(
     renderer: &mut Renderer,
     draw_data: &DrawData,
 ) -> Result<(), Box<dyn Error>> {
-    unsafe {
-        vk_context.device().reset_command_pool(
-            vk_context.command_pool(),
-            vk::CommandPoolResetFlags::empty(),
-        )?
-    };
+    unsafe { device.reset_command_pool(command_pool, vk::CommandPoolResetFlags::empty())? };
 
     let command_buffer_begin_info =
         vk::CommandBufferBeginInfo::builder().flags(vk::CommandBufferUsageFlags::SIMULTANEOUS_USE);
-    unsafe {
-        vk_context
-            .device()
-            .begin_command_buffer(command_buffer, &command_buffer_begin_info)?
-    };
+    unsafe { device.begin_command_buffer(command_buffer, &command_buffer_begin_info)? };
 
     let render_pass_begin_info = vk::RenderPassBeginInfo::builder()
         .render_pass(render_pass)
@@ -1002,18 +1038,18 @@ fn record_command_buffers<C: RendererVkContext>(
         }]);
 
     unsafe {
-        vk_context.device().cmd_begin_render_pass(
+        device.cmd_begin_render_pass(
             command_buffer,
             &render_pass_begin_info,
             vk::SubpassContents::INLINE,
         )
     };
 
-    renderer.cmd_draw(vk_context, command_buffer, draw_data)?;
+    renderer.cmd_draw(command_buffer, draw_data)?;
 
-    unsafe { vk_context.device().cmd_end_render_pass(command_buffer) };
+    unsafe { device.cmd_end_render_pass(command_buffer) };
 
-    unsafe { vk_context.device().end_command_buffer(command_buffer)? };
+    unsafe { device.end_command_buffer(command_buffer)? };
 
     Ok(())
 }

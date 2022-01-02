@@ -1,37 +1,41 @@
+#[cfg(not(any(feature = "gpu-allocator", feature = "vk-mem")))]
 mod default;
-#[cfg(feature = "vkmem")]
+
+#[cfg(not(any(feature = "gpu-allocator", feature = "vk-mem")))]
+pub use self::default::{Allocator, Memory};
+
+#[cfg(feature = "gpu-allocator")]
+mod gpu;
+
+#[cfg(feature = "gpu-allocator")]
+pub use self::gpu::{Allocator, Memory};
+
+#[cfg(feature = "vk-mem")]
 mod vkmem;
 
-use crate::{RendererResult, RendererVkContext};
-use ash::version::DeviceV1_0;
-use ash::vk;
+#[cfg(feature = "vk-mem")]
+pub use self::vkmem::{Allocator, Memory};
 
-use self::default::DefaultAllocator;
-#[cfg(feature = "vkmem")]
-use self::vkmem::VkMemAllocator;
-
-/// Abstraction over memory used by Vulkan resources.
-pub enum Memory {
-    DeviceMemory(vk::DeviceMemory),
-    #[cfg(feature = "vkmem")]
-    VkMemAllocation(vk_mem::Allocation),
-}
+use crate::RendererResult;
+use ash::{vk, Device};
 
 /// Base allocator trait for all implementations.
-pub trait AllocatorTrait {
+pub trait Allocate {
+    type Memory;
+
     /// Create a Vulkan buffer.
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `device` - A reference to Vulkan device.
     /// * `size` - The size in bytes of the buffer.
     /// * `usage` - The buffer usage flags.
-    fn create_buffer<C: RendererVkContext>(
-        &self,
-        vk_context: &C,
+    fn create_buffer(
+        &mut self,
+        device: &Device,
         size: usize,
         usage: vk::BufferUsageFlags,
-    ) -> RendererResult<(vk::Buffer, Memory)>;
+    ) -> RendererResult<(vk::Buffer, Self::Memory)>;
 
     /// Create a Vulkan image.
     ///
@@ -39,167 +43,55 @@ pub trait AllocatorTrait {
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `device` - A reference to Vulkan device.
     /// * `width` - The width of the image to create.
     /// * `height` - The height of the image to create.
-    fn create_image<C: RendererVkContext>(
-        &self,
-        vk_context: &C,
+    fn create_image(
+        &mut self,
+        device: &Device,
         width: u32,
         height: u32,
-    ) -> RendererResult<(vk::Image, Memory)>;
+    ) -> RendererResult<(vk::Image, Self::Memory)>;
 
     /// Destroys a buffer.
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `device` - A reference to Vulkan device.
     /// * `buffer` - The buffer to destroy.
     /// * `memory` - The buffer memory to destroy.
-    fn destroy_buffer<C: RendererVkContext>(
-        &self,
-        vk_context: &C,
+    fn destroy_buffer(
+        &mut self,
+        device: &Device,
         buffer: vk::Buffer,
-        memory: &Memory,
-    ) -> RendererResult<()> {
-        match memory {
-            Memory::DeviceMemory(memory) => unsafe {
-                let device = vk_context.device();
-                device.destroy_buffer(buffer, None);
-                device.free_memory(*memory, None);
-            },
-            #[cfg(feature = "vkmem")]
-            Memory::VkMemAllocation(allocation) => {
-                vk_context
-                    .vk_mem_allocator()
-                    .destroy_buffer(buffer, &allocation);
-            }
-        }
-
-        Ok(())
-    }
+        memory: Self::Memory,
+    ) -> RendererResult<()>;
 
     /// Destroys an image.
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
+    /// * `device` - A reference to Vulkan device.
     /// * `image` - The image to destroy.
     /// * `memory` - The image memory to destroy.
-    fn destroy_image<C: RendererVkContext>(
-        &self,
-        vk_context: &C,
+    fn destroy_image(
+        &mut self,
+        device: &Device,
         image: vk::Image,
-        memory: &Memory,
-    ) -> RendererResult<()> {
-        match memory {
-            Memory::DeviceMemory(memory) => unsafe {
-                let device = vk_context.device();
-                device.destroy_image(image, None);
-                device.free_memory(*memory, None);
-            },
-            #[cfg(feature = "vkmem")]
-            Memory::VkMemAllocation(allocation) => {
-                vk_context
-                    .vk_mem_allocator()
-                    .destroy_image(image, &allocation);
-            }
-        }
-
-        Ok(())
-    }
+        memory: Self::Memory,
+    ) -> RendererResult<()>;
 
     /// Update buffer data
     ///
     /// # Arguments
     ///
-    /// * `vk_context` - A reference to a type implementing the [`RendererVkContext`] trait.
-    /// * `buffer_memory` - The memory of the buffer to update.
+    /// * `device` - A reference to Vulkan device.
+    /// * `memory` - The memory of the buffer to update.
     /// * `data` - The data to update the buffer with.
-    fn update_buffer<C: RendererVkContext, T: Copy>(
-        &self,
-        vk_context: &C,
-        buffer_memory: &Memory,
+    fn update_buffer<T: Copy>(
+        &mut self,
+        device: &Device,
+        memory: &Self::Memory,
         data: &[T],
-    ) -> RendererResult<()> {
-        let size = (data.len() * std::mem::size_of::<T>()) as _;
-        unsafe {
-            match buffer_memory {
-                Memory::DeviceMemory(memory) => {
-                    let device = vk_context.device();
-                    let data_ptr =
-                        device.map_memory(*memory, 0, size, vk::MemoryMapFlags::empty())?;
-                    let mut align =
-                        ash::util::Align::new(data_ptr, std::mem::align_of::<T>() as _, size);
-                    align.copy_from_slice(&data);
-                    device.unmap_memory(*memory);
-                }
-                #[cfg(feature = "vkmem")]
-                Memory::VkMemAllocation(allocation) => {
-                    let allocator = vk_context.vk_mem_allocator();
-                    let data_ptr = allocator.map_memory(allocation)? as *mut std::ffi::c_void;
-                    let mut align =
-                        ash::util::Align::new(data_ptr, std::mem::align_of::<T>() as _, size);
-                    align.copy_from_slice(&data);
-                    allocator.unmap_memory(allocation);
-                }
-            }
-        };
-        Ok(())
-    }
-}
-
-/// Vulkan resource allocator.
-///
-/// Create Vulkan resources using memory like buffers and images.
-///
-/// # Variants
-///
-/// * `Default` - Default allocator.
-/// * `VkMem` - Allocator using vk-mem-rs crate.
-pub enum Allocator {
-    Default(DefaultAllocator),
-    #[cfg(feature = "vkmem")]
-    VkMem(VkMemAllocator),
-}
-
-impl Allocator {
-    /// Get a default allocator.
-    pub fn defaut() -> Self {
-        Self::Default(DefaultAllocator)
-    }
-
-    /// Get a vk-mem allocator.
-    #[cfg(feature = "vkmem")]
-    pub fn vk_mem() -> Self {
-        Self::VkMem(VkMemAllocator)
-    }
-}
-
-impl AllocatorTrait for Allocator {
-    fn create_buffer<C: RendererVkContext>(
-        &self,
-        vk_context: &C,
-        size: usize,
-        usage: vk::BufferUsageFlags,
-    ) -> RendererResult<(vk::Buffer, Memory)> {
-        match self {
-            Self::Default(allocator) => allocator.create_buffer(vk_context, size, usage),
-            #[cfg(feature = "vkmem")]
-            Self::VkMem(allocator) => allocator.create_buffer(vk_context, size, usage),
-        }
-    }
-
-    fn create_image<C: RendererVkContext>(
-        &self,
-        vk_context: &C,
-        width: u32,
-        height: u32,
-    ) -> RendererResult<(vk::Image, Memory)> {
-        match self {
-            Self::Default(allocator) => allocator.create_image(vk_context, width, height),
-            #[cfg(feature = "vkmem")]
-            Self::VkMem(allocator) => allocator.create_image(vk_context, width, height),
-        }
-    }
+    ) -> RendererResult<()>;
 }
