@@ -140,7 +140,12 @@ impl Allocate for Allocator {
     ) -> RendererResult<()> {
         let size = (data.len() * std::mem::size_of::<T>()) as _;
         unsafe {
-            let data_ptr = memory.mapped_ptr().unwrap().as_ptr();
+            let data_ptr = memory
+                .mapped_ptr()
+                .ok_or(RendererError::Allocator(
+                    "Failed to get mapped memory pointer".into(),
+                ))?
+                .as_ptr();
             let mut align = ash::util::Align::new(data_ptr, std::mem::align_of::<T>() as _, size);
             align.copy_from_slice(data);
         };

@@ -41,9 +41,9 @@
 //!
 //! This feature adds support for gpu-allocator. It changes `Renderer::new` which now takes
 //! a `Arc<Mutex<gpu_allocator::vulkan::Allocator>>`. All internal allocator are then done using the allocator.
-//! 
+//!
 //! ### vk-mem
-//! 
+//!
 //! This feature adds support for [vk-mem-rs][vk-mem-rs]. It adds `Renderer::with_vk_mem_allocator` which takes
 //! a `Arc<Mutex<vk_mem::Allocator>>`. All internal allocator are then done using the allocator.
 //!
@@ -72,24 +72,24 @@
 //! cargo run --example <example>
 //!
 //! ## Example can be one of the following value:
-//! # - collapsing_header
-//! # - color_button
-//! # - custom_textures
-//! # - disablement
-//! # - draw_list
-//! # - hello_world
-//! # - keyboard
-//! # - long_list
-//! # - multiple fonts
-//! # - progress_bar
-//! # - radio_button
-//! # - slider : TODO: crashes
-//! # - tables_api
-//! # - test_drawing_channels_split
-//! # - test_window_impl
-//! # - test_window
-//! # - text_callbacks
-//! # - text_input
+//! ## - collapsing_header
+//! ## - color_button
+//! ## - custom_textures
+//! ## - disablement
+//! ## - draw_list
+//! ## - hello_world
+//! ## - keyboard
+//! ## - long_list
+//! ## - multiple fonts
+//! ## - progress_bar
+//! ## - radio_button
+//! ## - slider : TODO: crashes
+//! ## - tables_api
+//! ## - test_drawing_channels_split
+//! ## - test_window_impl
+//! ## - test_window
+//! ## - text_callbacks
+//! ## - text_input
 //! ```
 //!
 //! [imgui-rs]: https://github.com/Gekkio/imgui-rs
