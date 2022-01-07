@@ -69,6 +69,23 @@ vk-mem = { git = "https://github.com/adrien-ben/vk-mem-rs", tag = "0.2.3-ash-0.3
 
 You can find an example of integration in the [common module](examples/common/mod.rs) of the examples.
 
+```rust
+// Example with default allocator
+let renderer = Renderer::with_default_allocator(
+    &instance,
+    physical_device,
+    device.clone(),
+    graphics_queue,
+    command_pool,
+    render_pass,
+    &mut imgui,
+    Some(Options {
+        in_flight_frames: 1,
+        ..Default::default()
+    }),
+).unwrap();
+```
+
 ## Examples
 
 You can run a set of examples by running the following command:
@@ -98,7 +115,7 @@ cargo run --example <example>
 # - hello_world
 # - keyboard
 # - long_list
-# - multiple fonts
+# - multiple_fonts
 # - progress_bar
 # - radio_button
 # - slider : TODO: crashes

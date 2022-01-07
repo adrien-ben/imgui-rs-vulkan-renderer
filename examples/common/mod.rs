@@ -150,9 +150,12 @@ impl<A: App> System<A> {
                 vulkan_context.device.clone(),
                 vulkan_context.graphics_queue,
                 vulkan_context.command_pool,
-                1,
                 swapchain.render_pass,
                 &mut imgui,
+                Some(Options {
+                    in_flight_frames: 1,
+                    ..Default::default()
+                }),
             )?
         };
 
@@ -176,9 +179,12 @@ impl<A: App> System<A> {
                 vulkan_context.device.clone(),
                 vulkan_context.graphics_queue,
                 vulkan_context.command_pool,
-                1,
                 swapchain.render_pass,
                 &mut imgui,
+                Some(Options {
+                    in_flight_frames: 1,
+                    ..Default::default()
+                }),
             )?
         };
 
@@ -189,9 +195,12 @@ impl<A: App> System<A> {
             vulkan_context.device.clone(),
             vulkan_context.graphics_queue,
             vulkan_context.command_pool,
-            1,
             swapchain.render_pass,
             &mut imgui,
+            Some(Options {
+                in_flight_frames: 1,
+                ..Default::default()
+            }),
         )?;
 
         Ok(Self {

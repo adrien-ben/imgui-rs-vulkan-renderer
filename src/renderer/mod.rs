@@ -30,6 +30,30 @@ use {
 /// [`RendererError`]: enum.RendererError.html
 pub type RendererResult<T> = Result<T, RendererError>;
 
+/// Optional parameters of the renderer.
+#[derive(Debug, Clone, Copy)]
+pub struct Options {
+    /// The number of in flight frames of the application.
+    pub in_flight_frames: usize,
+    /// If true enables depth test when rendering.
+    pub enable_depth_test: bool,
+    /// If true enables depth writes when rendering.
+    /// 
+    /// Note that depth writes are always disabled when enable_depth_test is false.
+    /// See <https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPipelineDepthStencilStateCreateInfo.html>
+    pub enable_depth_write: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            in_flight_frames: 1,
+            enable_depth_test: false,
+            enable_depth_write: false,
+        }
+    }
+}
+
 /// Vulkan renderer for imgui.
 ///
 /// It records rendering command to the provided command buffer at each call to [`cmd_draw`].
@@ -48,7 +72,7 @@ pub struct Renderer {
     descriptor_pool: vk::DescriptorPool,
     descriptor_set: vk::DescriptorSet,
     textures: Textures<vk::DescriptorSet>,
-    in_flight_frames: usize,
+    options: Options,
     frames: Option<Frames>,
 }
 
@@ -69,9 +93,9 @@ impl Renderer {
     ///             commands: [vkCmdCopyBufferToImage](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html),
     ///             [vkCmdPipelineBarrier](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPipelineBarrier.html)
     /// * `command_pool` - A Vulkan command pool used to allocate command buffers to upload textures to the gpu.
-    /// * `in_flight_frames` - The number of in flight frames of the application.
     /// * `render_pass` - The render pass used to render the gui.
     /// * `imgui` - The imgui context.
+    /// * `options` - Optional parameters of the renderer.
     ///
     /// # Errors
     ///
@@ -84,9 +108,9 @@ impl Renderer {
         device: Device,
         queue: vk::Queue,
         command_pool: vk::CommandPool,
-        in_flight_frames: usize,
         render_pass: vk::RenderPass,
         imgui: &mut Context,
+        options: Option<Options>,
     ) -> RendererResult<Self> {
         let memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
@@ -96,9 +120,9 @@ impl Renderer {
             queue,
             command_pool,
             Allocator::new(memory_properties),
-            in_flight_frames,
             render_pass,
             imgui,
+            options,
         )
     }
 
@@ -117,9 +141,9 @@ impl Renderer {
     ///             commands: [vkCmdCopyBufferToImage](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html),
     ///             [vkCmdPipelineBarrier](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPipelineBarrier.html)
     /// * `command_pool` - A Vulkan command pool used to allocate command buffers to upload textures to the gpu.
-    /// * `in_flight_frames` - The number of in flight frames of the application.
     /// * `render_pass` - The render pass used to render the gui.
     /// * `imgui` - The imgui context.
+    /// * `options` - Optional parameters of the renderer.
     ///
     /// # Errors
     ///
@@ -131,18 +155,18 @@ impl Renderer {
         device: Device,
         queue: vk::Queue,
         command_pool: vk::CommandPool,
-        in_flight_frames: usize,
         render_pass: vk::RenderPass,
         imgui: &mut Context,
+        options: Option<Options>,
     ) -> RendererResult<Self> {
         Self::from_allocator(
             device,
             queue,
             command_pool,
             Allocator::new(gpu_allocator),
-            in_flight_frames,
             render_pass,
             imgui,
+            options,
         )
     }
 
@@ -161,9 +185,9 @@ impl Renderer {
     ///             commands: [vkCmdCopyBufferToImage](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html),
     ///             [vkCmdPipelineBarrier](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPipelineBarrier.html)
     /// * `command_pool` - A Vulkan command pool used to allocate command buffers to upload textures to the gpu.
-    /// * `in_flight_frames` - The number of in flight frames of the application.
     /// * `render_pass` - The render pass used to render the gui.
     /// * `imgui` - The imgui context.
+    /// * `options` - Optional parameters of the renderer.
     ///
     /// # Errors
     ///
@@ -175,18 +199,18 @@ impl Renderer {
         device: Device,
         queue: vk::Queue,
         command_pool: vk::CommandPool,
-        in_flight_frames: usize,
         render_pass: vk::RenderPass,
         imgui: &mut Context,
+        options: Option<Options>,
     ) -> RendererResult<Self> {
         Self::from_allocator(
             device,
             queue,
             command_pool,
             Allocator::new(vk_mem_allocator),
-            in_flight_frames,
             render_pass,
             imgui,
+            options,
         )
     }
 
@@ -195,11 +219,15 @@ impl Renderer {
         queue: vk::Queue,
         command_pool: vk::CommandPool,
         mut allocator: Allocator,
-        in_flight_frames: usize,
         render_pass: vk::RenderPass,
         imgui: &mut Context,
+        options: Option<Options>,
     ) -> RendererResult<Self> {
-        if in_flight_frames == 0 {
+        let options = options.unwrap_or_default();
+
+        log::debug!("Creating imgui renderer with options {:?}", options);
+
+        if options.in_flight_frames == 0 {
             return Err(RendererError::Init(String::from(
                 "'in_flight_frames' parameter should be at least one",
             )));
@@ -210,7 +238,7 @@ impl Renderer {
 
         // Pipeline and layout
         let pipeline_layout = create_vulkan_pipeline_layout(&device, descriptor_set_layout)?;
-        let pipeline = create_vulkan_pipeline(&device, pipeline_layout, render_pass)?;
+        let pipeline = create_vulkan_pipeline(&device, pipeline_layout, render_pass, options)?;
 
         // Fonts texture
         let fonts_texture = {
@@ -256,7 +284,7 @@ impl Renderer {
             descriptor_pool,
             descriptor_set,
             textures,
-            in_flight_frames,
+            options,
             frames: None,
         })
     }
@@ -276,7 +304,12 @@ impl Renderer {
     /// * [`RendererError`] - If any Vulkan error is encountered during pipeline creation.
     pub fn set_render_pass(&mut self, render_pass: vk::RenderPass) -> RendererResult<()> {
         unsafe { self.device.destroy_pipeline(self.pipeline, None) };
-        self.pipeline = create_vulkan_pipeline(&self.device, self.pipeline_layout, render_pass)?;
+        self.pipeline = create_vulkan_pipeline(
+            &self.device,
+            self.pipeline_layout,
+            render_pass,
+            self.options,
+        )?;
         Ok(())
     }
 
@@ -401,7 +434,7 @@ impl Renderer {
                 &self.device,
                 &mut self.allocator,
                 draw_data,
-                self.in_flight_frames,
+                self.options.in_flight_frames,
             )?);
         }
 

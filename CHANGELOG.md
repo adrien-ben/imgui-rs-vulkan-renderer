@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+- Add optional depth test/write support.
+- **BREAKING** Added `Options` parameter to all renderer instanciation methods.
+- **BREAKING** Remove in_flight_frames parameter from all renderer instanciation methods. Moved to `Options`.
+
 ## 1.0.0
 
 - Rework API:

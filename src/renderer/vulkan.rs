@@ -3,7 +3,7 @@
 //! A set of functions used to ease Vulkan resources creations. These are supposed to be internal but
 //! are exposed since they might help users create descriptors sets when using the custom textures.
 
-use crate::RendererResult;
+use crate::{Options, RendererResult};
 use ash::{vk, Device};
 pub(crate) use buffer::*;
 use std::{ffi::CString, mem};
@@ -58,6 +58,7 @@ pub(crate) fn create_vulkan_pipeline(
     device: &Device,
     pipeline_layout: vk::PipelineLayout,
     render_pass: vk::RenderPass,
+    options: Options,
 ) -> RendererResult<vk::Pipeline> {
     let entry_point_name = CString::new("main").unwrap();
 
@@ -165,6 +166,14 @@ pub(crate) fn create_vulkan_pipeline(
         .attachments(&color_blend_attachments)
         .blend_constants([0.0, 0.0, 0.0, 0.0]);
 
+    let depth_stencil_state_create_info = vk::PipelineDepthStencilStateCreateInfo::builder()
+        .depth_test_enable(options.enable_depth_test)
+        .depth_write_enable(options.enable_depth_write)
+        .depth_compare_op(vk::CompareOp::ALWAYS)
+        .depth_bounds_test_enable(false)
+        .stencil_test_enable(false)
+        .build();
+
     let dynamic_states = [vk::DynamicState::SCISSOR, vk::DynamicState::VIEWPORT];
     let dynamic_states_info =
         vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&dynamic_states);
@@ -177,6 +186,7 @@ pub(crate) fn create_vulkan_pipeline(
         .viewport_state(&viewport_info)
         .multisample_state(&multisampling_info)
         .color_blend_state(&color_blending_info)
+        .depth_stencil_state(&depth_stencil_state_create_info)
         .dynamic_state(&dynamic_states_info)
         .layout(pipeline_layout)
         .render_pass(render_pass)
