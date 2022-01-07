@@ -23,7 +23,7 @@ imgui = "^0.8"
 ash = { version = "0.35", default-features = false, features = ["debug"] }
 ultraviolet = "0.8" 
 
-gpu-allocator = { version = "0.14", default-features = false, features = ["vulkan"], optional = true }
+gpu-allocator = { version = "0.15", default-features = false, features = ["vulkan"], optional = true }
 
 vk-mem = { version = "0.2", optional = true }
 
