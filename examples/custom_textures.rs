@@ -36,10 +36,10 @@ struct CustomTexturesApp {
     _descriptor_set: vk::DescriptorSet,
     my_texture: Texture,
     my_texture_id: Option<TextureId>,
-    lenna: Option<Lenna>,
+    my_stuff: Option<MyStuff>,
 }
 
-struct Lenna {
+struct MyStuff {
     descriptor_set_layout: vk::DescriptorSetLayout,
     descriptor_pool: vk::DescriptorPool,
     _descriptor_set: vk::DescriptorSet,
@@ -105,9 +105,9 @@ impl CustomTexturesApp {
 
         let my_texture_id = Some(texture_id);
 
-        // Lenna
-        let lenna = Some(
-            Lenna::new(
+        // MyStuff
+        let my_stuff = Some(
+            MyStuff::new(
                 instance,
                 device,
                 physical_device,
@@ -124,7 +124,7 @@ impl CustomTexturesApp {
             _descriptor_set: descriptor_set,
             my_texture,
             my_texture_id,
-            lenna,
+            my_stuff,
         }
     }
 
@@ -138,14 +138,14 @@ impl CustomTexturesApp {
                     Image::new(my_texture_id, [100.0, 100.0]).build(ui);
                 }
 
-                if let Some(lenna) = &self.lenna {
-                    ui.text("Say hello to Lenna.jpg");
-                    lenna.show(ui);
+                if let Some(my_stuff) = &self.my_stuff {
+                    ui.text("Say hello to my jpg");
+                    my_stuff.show(ui);
                 }
 
                 // Example of using custom textures on a button
-                if let Some(lenna) = &self.lenna {
-                    ui.text("The Lenna buttons");
+                if let Some(my_stuff) = &self.my_stuff {
+                    ui.text("The buttons");
 
                     {
                         ui.invisible_button("Boring Button", [100.0, 100.0]);
@@ -166,7 +166,7 @@ impl CustomTexturesApp {
 
                         let draw_list = ui.get_window_draw_list();
                         draw_list
-                            .add_image(lenna.texture_id, ui.item_rect_min(), ui.item_rect_max())
+                            .add_image(my_stuff.texture_id, ui.item_rect_min(), ui.item_rect_max())
                             .col(tint)
                             .build();
                     }
@@ -195,7 +195,7 @@ impl CustomTexturesApp {
 
                         let draw_list = ui.get_window_draw_list();
                         draw_list
-                            .add_image_quad(lenna.texture_id, tl, tr, br, bl)
+                            .add_image_quad(my_stuff.texture_id, tl, tr, br, bl)
                             .build();
                     }
 
@@ -207,7 +207,7 @@ impl CustomTexturesApp {
                         let draw_list = ui.get_window_draw_list();
                         draw_list
                             .add_image_rounded(
-                                lenna.texture_id,
+                                my_stuff.texture_id,
                                 ui.item_rect_min(),
                                 ui.item_rect_max(),
                                 16.0,
@@ -226,7 +226,7 @@ impl CustomTexturesApp {
     }
 }
 
-impl Lenna {
+impl MyStuff {
     fn new(
         instance: &Instance,
         device: &Device,
@@ -235,9 +235,10 @@ impl Lenna {
         command_pool: vk::CommandPool,
         textures: &mut Textures<vk::DescriptorSet>,
     ) -> Result<Self, Box<dyn Error>> {
-        let lenna_bytes = include_bytes!("../assets/images/Lenna.jpg");
+        // image source: https://raw.githubusercontent.com/wiki/ocornut/imgui/tutorials/MyImage01.jpg
+        let image_bytes = include_bytes!("../assets/images/MyImage01.jpg");
         let image =
-            image::load_from_memory_with_format(lenna_bytes, image::ImageFormat::Jpeg).unwrap();
+            image::load_from_memory_with_format(image_bytes, image::ImageFormat::Jpeg).unwrap();
         let (width, height) = image.dimensions();
         let data = image.into_rgba8();
 
@@ -269,7 +270,7 @@ impl Lenna {
         .unwrap();
 
         let texture_id = textures.insert(descriptor_set);
-        Ok(Lenna {
+        Ok(MyStuff {
             descriptor_set_layout,
             descriptor_pool,
             _descriptor_set: descriptor_set,
@@ -298,8 +299,8 @@ impl App for CustomTexturesApp {
             let device = &context.device;
             device.destroy_descriptor_pool(self.descriptor_pool, None);
             self.my_texture.destroy(device);
-            if let Some(lenna) = &mut self.lenna {
-                lenna.destroy(device);
+            if let Some(my_stuff) = &mut self.my_stuff {
+                my_stuff.destroy(device);
             }
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
