@@ -13,10 +13,6 @@ pub enum RendererError {
     #[error("A gpu allocator error occured: {0}")]
     GpuAllocator(#[from] gpu_allocator::AllocationError),
 
-    #[cfg(feature = "vk-mem")]
-    #[error("A vk-mem allocator error occured: {0}")]
-    VkMemAllocator(#[from] vk_mem::Error),
-
     /// Io errors.
     #[error("A io error occured: {0}")]
     Io(#[from] std::io::Error),

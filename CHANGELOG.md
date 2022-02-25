@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- Bump dependencies
+    - ash 0.36
+    - gpu-allocator 0.17
+    - vk-mem (forked version compatible with ash 0.36)
+
 ## 1.1.1
 
 - Fix blend function

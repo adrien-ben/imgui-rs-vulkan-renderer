@@ -49,7 +49,7 @@ impl Allocate for Allocator {
         let allocator = self.get_allocator()?;
 
         let (buffer, allocation, buffer_alloc_info) =
-            allocator.create_buffer(&buffer_info, &buffer_alloc_info)?;
+            unsafe { allocator.create_buffer(&buffer_info, &buffer_alloc_info)? };
         log::debug!("Allocated buffer. Allocation info: {:?}", buffer_alloc_info);
 
         Ok((buffer, allocation))
@@ -88,7 +88,7 @@ impl Allocate for Allocator {
         let allocator = self.get_allocator()?;
 
         let (image, allocation, image_alloc_info) =
-            allocator.create_image(&image_info, &image_alloc_info)?;
+            unsafe { allocator.create_image(&image_info, &image_alloc_info)? };
         log::debug!("Allocated image. Allocation info: {:?}", image_alloc_info);
 
         Ok((image, allocation))
@@ -102,7 +102,7 @@ impl Allocate for Allocator {
     ) -> RendererResult<()> {
         let allocator = self.get_allocator()?;
 
-        allocator.destroy_buffer(buffer, &memory);
+        unsafe { allocator.destroy_buffer(buffer, memory) };
 
         Ok(())
     }
@@ -115,7 +115,7 @@ impl Allocate for Allocator {
     ) -> RendererResult<()> {
         let allocator = self.get_allocator()?;
 
-        allocator.destroy_image(image, &memory);
+        unsafe { allocator.destroy_image(image, memory) };
 
         Ok(())
     }
@@ -129,11 +129,11 @@ impl Allocate for Allocator {
         let size = (data.len() * std::mem::size_of::<T>()) as _;
 
         let allocator = self.get_allocator()?;
-        let data_ptr = allocator.map_memory(memory)? as *mut std::ffi::c_void;
+        let data_ptr = unsafe { allocator.map_memory(*memory)? as *mut std::ffi::c_void };
         let mut align =
             unsafe { ash::util::Align::new(data_ptr, std::mem::align_of::<T>() as _, size) };
         align.copy_from_slice(data);
-        allocator.unmap_memory(memory);
+        unsafe { allocator.unmap_memory(*memory) };
 
         Ok(())
     }

@@ -4,9 +4,11 @@
 //!
 //! ## Compatibility
 //!
-//! | crate | imgui | ash  | gpu-allocator (feature) | vk-mem (feature)                |
-//! |-------|-------|------|-------------------------|---------------------------------|
-//! | 1.0.0 | 0.8   | 0.35 | 0.15                    | 0.2.3 ([forked][forked-mem-rs]) |
+//! | crate | imgui | ash  | gpu-allocator (feature) | vk-mem (feature)                    |
+//! |-------|-------|------|-------------------------|-------------------------------------|
+//! | 1.2.0 | 0.8   | 0.36 | 0.17                    | 0.2.3 ([forked][forked-mem-rs-036]) |
+//! | 1.1.x | 0.8   | 0.35 | 0.15                    | 0.2.3 ([forked][forked-mem-rs-035]) |
+//! | 1.0.0 | 0.8   | 0.35 | 0.14                    | 0.2.3 ([forked][forked-mem-rs-035]) |
 //!
 //! ## How it works
 //!
