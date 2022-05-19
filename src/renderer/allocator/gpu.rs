@@ -22,10 +22,7 @@ impl Allocator {
 
     fn get_allocator(&self) -> RendererResult<MutexGuard<GpuAllocator>> {
         self.allocator.lock().map_err(|e| {
-            RendererError::Allocator(format!(
-                "Failed to acquire lock on allocator: {}",
-                e.to_string()
-            ))
+            RendererError::Allocator(format!("Failed to acquire lock on allocator: {e}"))
         })
     }
 }

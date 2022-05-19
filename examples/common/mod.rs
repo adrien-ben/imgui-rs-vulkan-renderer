@@ -32,7 +32,7 @@ use {
 #[cfg(feature = "vk-mem")]
 use {
     std::sync::{Arc, Mutex},
-    vk_mem::{Allocator, AllocatorCreateFlags, AllocatorCreateInfo},
+    vk_mem::{Allocator, AllocatorCreateInfo},
 };
 
 const WIDTH: u32 = 1024;
@@ -162,18 +162,14 @@ impl<A: App> System<A> {
         #[cfg(feature = "vk-mem")]
         let renderer = {
             let allocator = {
-                let allocator_create_info = AllocatorCreateInfo {
-                    physical_device: vulkan_context.physical_device,
-                    device: vulkan_context.device.clone(),
-                    instance: vulkan_context.instance.clone(),
-                    flags: AllocatorCreateFlags::NONE,
-                    preferred_large_heap_block_size: 0,
-                    frame_in_use_count: 0,
-                    heap_size_limits: None,
-                    allocation_callbacks: None,
-                    vulkan_api_version: vk::make_api_version(0, 1, 0, 0),
-                };
-                unsafe { Allocator::new(&allocator_create_info)? }
+                let allocator_create_info = AllocatorCreateInfo::new(
+                    &vulkan_context.instance,
+                    &vulkan_context.device,
+                    &vulkan_context.physical_device,
+                )
+                .vulkan_api_version(vk::make_api_version(0, 1, 0, 0));
+
+                Allocator::new(allocator_create_info)?
             };
 
             Renderer::with_vk_mem_allocator(
@@ -395,7 +391,7 @@ impl<A: App> System<A> {
                     event: WindowEvent::Resized(new_size),
                     ..
                 } => {
-                    log::debug!("Window was resized. New size is {:?}", new_size);
+                    log::debug!("Window was resized. New size is {new_size:?}");
                     dirty_swapchain = true;
                 }
                 // Exit
@@ -633,11 +629,7 @@ fn create_vulkan_instance(
         .engine_version(vk::make_api_version(0, 0, 1, 0))
         .api_version(vk::make_api_version(0, 1, 0, 0));
 
-    let extension_names = ash_window::enumerate_required_extensions(window)?;
-    let mut extension_names = extension_names
-        .iter()
-        .map(|ext| ext.as_ptr())
-        .collect::<Vec<_>>();
+    let mut extension_names = ash_window::enumerate_required_extensions(window)?.to_vec();
     extension_names.push(DebugUtils::name().as_ptr());
 
     let instance_create_info = vk::InstanceCreateInfo::builder()
@@ -678,10 +670,10 @@ unsafe extern "system" fn vulkan_debug_callback(
 
     let message = CStr::from_ptr((*p_callback_data).p_message);
     match flag {
-        Flag::VERBOSE => log::debug!("{:?} - {:?}", typ, message),
-        Flag::INFO => log::info!("{:?} - {:?}", typ, message),
-        Flag::WARNING => log::warn!("{:?} - {:?}", typ, message),
-        _ => log::error!("{:?} - {:?}", typ, message),
+        Flag::VERBOSE => log::debug!("{typ:?} - {message:?}"),
+        Flag::INFO => log::info!("{typ:?} - {message:?}"),
+        Flag::WARNING => log::warn!("{typ:?} - {message:?}"),
+        _ => log::error!("{typ:?} - {message:?}"),
     }
     vk::FALSE
 }
@@ -764,7 +756,7 @@ fn create_vulkan_physical_device_and_get_graphics_and_present_qs_indices(
     unsafe {
         let props = instance.get_physical_device_properties(device);
         let device_name = CStr::from_ptr(props.device_name.as_ptr());
-        log::debug!("Selected physical device: {:?}", device_name);
+        log::debug!("Selected physical device: {device_name:?}");
     }
 
     Ok((device, graphics.unwrap(), present.unwrap()))
@@ -843,7 +835,7 @@ fn create_vulkan_swapchain(
                 .unwrap_or(&formats[0])
         }
     };
-    log::debug!("Swapchain format: {:?}", format);
+    log::debug!("Swapchain format: {format:?}");
 
     // Swapchain present mode
     let present_mode = {
@@ -861,7 +853,7 @@ fn create_vulkan_swapchain(
             vk::PresentModeKHR::FIFO
         }
     };
-    log::debug!("Swapchain present mode: {:?}", present_mode);
+    log::debug!("Swapchain present mode: {present_mode:?}");
 
     let capabilities = unsafe {
         vulkan_context
@@ -884,11 +876,11 @@ fn create_vulkan_swapchain(
             vk::Extent2D { width, height }
         }
     };
-    log::debug!("Swapchain extent: {:?}", extent);
+    log::debug!("Swapchain extent: {extent:?}");
 
     // Swapchain image count
     let image_count = capabilities.min_image_count;
-    log::debug!("Swapchain image count: {:?}", image_count);
+    log::debug!("Swapchain image count: {image_count:?}");
 
     // Swapchain
     let families_indices = [

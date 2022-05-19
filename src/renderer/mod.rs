@@ -38,7 +38,7 @@ pub struct Options {
     /// If true enables depth test when rendering.
     pub enable_depth_test: bool,
     /// If true enables depth writes when rendering.
-    /// 
+    ///
     /// Note that depth writes are always disabled when enable_depth_test is false.
     /// See <https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPipelineDepthStencilStateCreateInfo.html>
     pub enable_depth_write: bool,
@@ -225,7 +225,7 @@ impl Renderer {
     ) -> RendererResult<Self> {
         let options = options.unwrap_or_default();
 
-        log::debug!("Creating imgui renderer with options {:?}", options);
+        log::debug!("Creating imgui renderer with options {options:?}");
 
         if options.in_flight_frames == 0 {
             return Err(RendererError::Init(String::from(
