@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0
+
+- Bump dependencies
+    - ash >= 0.34 <= 0.37
+    - gpu-allocator 0.18
+    - vk-mem (forked version compatible with ash >= 0.34 <= 0.37)
+
 ## 1.2.0
 
 - Bump dependencies

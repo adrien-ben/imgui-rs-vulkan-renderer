@@ -18,10 +18,7 @@ impl Allocator {
 
     fn get_allocator(&self) -> RendererResult<MutexGuard<GpuAllocator>> {
         self.allocator.lock().map_err(|e| {
-            RendererError::Allocator(format!(
-                "Failed to acquire lock on allocator: {}",
-                e.to_string()
-            ))
+            RendererError::Allocator(format!("Failed to acquire lock on allocator: {e}"))
         })
     }
 }
@@ -41,16 +38,13 @@ impl Allocate for Allocator {
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .build();
 
-        let buffer_alloc_info = AllocationCreateInfo {
-            usage: MemoryUsage::CpuOnly,
-            ..Default::default()
-        };
+        let buffer_alloc_info = AllocationCreateInfo::new().usage(MemoryUsage::CpuOnly);
 
         let allocator = self.get_allocator()?;
 
         let (buffer, allocation, buffer_alloc_info) =
             unsafe { allocator.create_buffer(&buffer_info, &buffer_alloc_info)? };
-        log::debug!("Allocated buffer. Allocation info: {:?}", buffer_alloc_info);
+        log::debug!("Allocated buffer. Allocation info: {buffer_alloc_info:?}");
 
         Ok((buffer, allocation))
     }
@@ -80,16 +74,13 @@ impl Allocate for Allocator {
             .samples(vk::SampleCountFlags::TYPE_1)
             .flags(vk::ImageCreateFlags::empty());
 
-        let image_alloc_info = AllocationCreateInfo {
-            usage: MemoryUsage::GpuOnly,
-            ..Default::default()
-        };
+        let image_alloc_info = AllocationCreateInfo::new().usage(MemoryUsage::GpuOnly);
 
         let allocator = self.get_allocator()?;
 
         let (image, allocation, image_alloc_info) =
             unsafe { allocator.create_image(&image_info, &image_alloc_info)? };
-        log::debug!("Allocated image. Allocation info: {:?}", image_alloc_info);
+        log::debug!("Allocated image. Allocation info: {image_alloc_info:?}");
 
         Ok((image, allocation))
     }
