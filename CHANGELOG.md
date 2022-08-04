@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0
+
+- Add support for Vulkan dynamic rendering
+
 ## 1.3.0
 
 - Bump dependencies
