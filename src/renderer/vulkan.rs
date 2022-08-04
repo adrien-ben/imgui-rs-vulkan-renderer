@@ -57,7 +57,8 @@ pub(crate) fn create_vulkan_pipeline_layout(
 pub(crate) fn create_vulkan_pipeline(
     device: &Device,
     pipeline_layout: vk::PipelineLayout,
-    render_pass: vk::RenderPass,
+    #[cfg(not(feature = "dynamic-rendering"))] render_pass: vk::RenderPass,
+    #[cfg(feature = "dynamic-rendering")] color_attachment_format: vk::Format,
     options: Options,
 ) -> RendererResult<vk::Pipeline> {
     let entry_point_name = CString::new("main").unwrap();
@@ -178,7 +179,7 @@ pub(crate) fn create_vulkan_pipeline(
     let dynamic_states_info =
         vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&dynamic_states);
 
-    let pipeline_info = [vk::GraphicsPipelineCreateInfo::builder()
+    let pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
         .stages(&shader_states_infos)
         .vertex_input_state(&vertex_input_info)
         .input_assembly_state(&input_assembly_info)
@@ -188,14 +189,26 @@ pub(crate) fn create_vulkan_pipeline(
         .color_blend_state(&color_blending_info)
         .depth_stencil_state(&depth_stencil_state_create_info)
         .dynamic_state(&dynamic_states_info)
-        .layout(pipeline_layout)
-        .render_pass(render_pass)
-        .subpass(0)
-        .build()];
+        .layout(pipeline_layout);
+
+    #[cfg(not(feature = "dynamic-rendering"))]
+    let pipeline_info = pipeline_info.render_pass(render_pass);
+
+    #[cfg(feature = "dynamic-rendering")]
+    let color_attachment_formats = [color_attachment_format];
+    #[cfg(feature = "dynamic-rendering")]
+    let mut rendering_info = vk::PipelineRenderingCreateInfo::builder()
+        .color_attachment_formats(&color_attachment_formats);
+    #[cfg(feature = "dynamic-rendering")]
+    let pipeline_info = pipeline_info.push_next(&mut rendering_info);
 
     let pipeline = unsafe {
         device
-            .create_graphics_pipelines(vk::PipelineCache::null(), &pipeline_info, None)
+            .create_graphics_pipelines(
+                vk::PipelineCache::null(),
+                std::slice::from_ref(&pipeline_info),
+                None,
+            )
             .map_err(|e| e.1)?[0]
     };
 

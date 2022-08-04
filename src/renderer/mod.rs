@@ -108,7 +108,8 @@ impl Renderer {
         device: Device,
         queue: vk::Queue,
         command_pool: vk::CommandPool,
-        render_pass: vk::RenderPass,
+        #[cfg(not(feature = "dynamic-rendering"))] render_pass: vk::RenderPass,
+        #[cfg(feature = "dynamic-rendering")] color_attachment_format: vk::Format,
         imgui: &mut Context,
         options: Option<Options>,
     ) -> RendererResult<Self> {
@@ -120,7 +121,10 @@ impl Renderer {
             queue,
             command_pool,
             Allocator::new(memory_properties),
+            #[cfg(not(feature = "dynamic-rendering"))]
             render_pass,
+            #[cfg(feature = "dynamic-rendering")]
+            color_attachment_format,
             imgui,
             options,
         )
@@ -155,7 +159,8 @@ impl Renderer {
         device: Device,
         queue: vk::Queue,
         command_pool: vk::CommandPool,
-        render_pass: vk::RenderPass,
+        #[cfg(not(feature = "dynamic-rendering"))] render_pass: vk::RenderPass,
+        #[cfg(feature = "dynamic-rendering")] color_attachment_format: vk::Format,
         imgui: &mut Context,
         options: Option<Options>,
     ) -> RendererResult<Self> {
@@ -164,7 +169,10 @@ impl Renderer {
             queue,
             command_pool,
             Allocator::new(gpu_allocator),
+            #[cfg(not(feature = "dynamic-rendering"))]
             render_pass,
+            #[cfg(feature = "dynamic-rendering")]
+            color_attachment_format,
             imgui,
             options,
         )
@@ -199,7 +207,8 @@ impl Renderer {
         device: Device,
         queue: vk::Queue,
         command_pool: vk::CommandPool,
-        render_pass: vk::RenderPass,
+        #[cfg(not(feature = "dynamic-rendering"))] render_pass: vk::RenderPass,
+        #[cfg(feature = "dynamic-rendering")] color_attachment_format: vk::Format,
         imgui: &mut Context,
         options: Option<Options>,
     ) -> RendererResult<Self> {
@@ -208,7 +217,10 @@ impl Renderer {
             queue,
             command_pool,
             Allocator::new(vk_mem_allocator),
+            #[cfg(not(feature = "dynamic-rendering"))]
             render_pass,
+            #[cfg(feature = "dynamic-rendering")]
+            color_attachment_format,
             imgui,
             options,
         )
@@ -219,7 +231,8 @@ impl Renderer {
         queue: vk::Queue,
         command_pool: vk::CommandPool,
         mut allocator: Allocator,
-        render_pass: vk::RenderPass,
+        #[cfg(not(feature = "dynamic-rendering"))] render_pass: vk::RenderPass,
+        #[cfg(feature = "dynamic-rendering")] color_attachment_format: vk::Format,
         imgui: &mut Context,
         options: Option<Options>,
     ) -> RendererResult<Self> {
@@ -238,7 +251,15 @@ impl Renderer {
 
         // Pipeline and layout
         let pipeline_layout = create_vulkan_pipeline_layout(&device, descriptor_set_layout)?;
-        let pipeline = create_vulkan_pipeline(&device, pipeline_layout, render_pass, options)?;
+        let pipeline = create_vulkan_pipeline(
+            &device,
+            pipeline_layout,
+            #[cfg(not(feature = "dynamic-rendering"))]
+            render_pass,
+            #[cfg(feature = "dynamic-rendering")]
+            color_attachment_format,
+            options,
+        )?;
 
         // Fonts texture
         let fonts_texture = {
@@ -302,6 +323,7 @@ impl Renderer {
     /// # Errors
     ///
     /// * [`RendererError`] - If any Vulkan error is encountered during pipeline creation.
+    #[cfg(not(feature = "dynamic-rendering"))]
     pub fn set_render_pass(&mut self, render_pass: vk::RenderPass) -> RendererResult<()> {
         unsafe { self.device.destroy_pipeline(self.pipeline, None) };
         self.pipeline = create_vulkan_pipeline(

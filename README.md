@@ -62,11 +62,17 @@ Cargo.toml file
 
 ```toml
 [patch.crates-io]
-vk-mem = { git = "https://github.com/adrien-ben/vk-mem-rs", tag = "0.2.3-ash-0.35" }
+vk-mem = { git = "https://github.com/adrien-ben/vk-mem-rs", tag = "0.2.3-ash-0.34-0.37" }
 ```
 
 > I'm still not sure with the `Arc<Mutex<...>>` stuff. It works for me but i'm unsure it'a the best way to go.
 > Any suggestion is welcome.
+
+### dynamic-rendering
+
+This feature is useful if you want to integrate the library in an app making use of Vulkan's dynamic rendering.
+When enabled, functions that usually takes a `vk::RenderPass` as argument will now take a `vk::Format` which is
+the format of the color attachment the UI will be drawn to.
 
 ## Integration
 
