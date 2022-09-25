@@ -54,6 +54,14 @@ impl Default for Options {
     }
 }
 
+/// `dynamic-rendering` feature related params
+#[cfg(feature = "dynamic-rendering")]
+#[derive(Debug, Clone, Copy)]
+pub struct DynamicRendering {
+    pub color_attachment_format: vk::Format,
+    pub depth_attachment_format: Option<vk::Format>,
+}
+
 /// Vulkan renderer for imgui.
 ///
 /// It records rendering command to the provided command buffer at each call to [`cmd_draw`].
@@ -93,7 +101,8 @@ impl Renderer {
     ///             commands: [vkCmdCopyBufferToImage](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html),
     ///             [vkCmdPipelineBarrier](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPipelineBarrier.html)
     /// * `command_pool` - A Vulkan command pool used to allocate command buffers to upload textures to the gpu.
-    /// * `render_pass` - The render pass used to render the gui.
+    /// * `render_pass` - *without dynamic-rendering feature* - The render pass used to render the gui.
+    /// * `dynamic_rendering` - *with dynamic-rendering feature* - Dynamic rendeing parameters
     /// * `imgui` - The imgui context.
     /// * `options` - Optional parameters of the renderer.
     ///
@@ -109,10 +118,12 @@ impl Renderer {
         queue: vk::Queue,
         command_pool: vk::CommandPool,
         #[cfg(not(feature = "dynamic-rendering"))] render_pass: vk::RenderPass,
-        #[cfg(feature = "dynamic-rendering")] color_attachment_format: vk::Format,
+        #[cfg(feature = "dynamic-rendering")] dynamic_rendering: DynamicRendering,
         imgui: &mut Context,
         options: Option<Options>,
     ) -> RendererResult<Self> {
+        use ash::extensions::khr::DynamicRendering;
+
         let memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
@@ -124,7 +135,7 @@ impl Renderer {
             #[cfg(not(feature = "dynamic-rendering"))]
             render_pass,
             #[cfg(feature = "dynamic-rendering")]
-            color_attachment_format,
+            dynamic_rendering,
             imgui,
             options,
         )
@@ -145,7 +156,8 @@ impl Renderer {
     ///             commands: [vkCmdCopyBufferToImage](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html),
     ///             [vkCmdPipelineBarrier](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPipelineBarrier.html)
     /// * `command_pool` - A Vulkan command pool used to allocate command buffers to upload textures to the gpu.
-    /// * `render_pass` - The render pass used to render the gui.
+    /// * `render_pass` - *without dynamic-rendering feature* - The render pass used to render the gui.
+    /// * `dynamic_rendering` - *with dynamic-rendering feature* - Dynamic rendeing parameters
     /// * `imgui` - The imgui context.
     /// * `options` - Optional parameters of the renderer.
     ///
@@ -160,7 +172,7 @@ impl Renderer {
         queue: vk::Queue,
         command_pool: vk::CommandPool,
         #[cfg(not(feature = "dynamic-rendering"))] render_pass: vk::RenderPass,
-        #[cfg(feature = "dynamic-rendering")] color_attachment_format: vk::Format,
+        #[cfg(feature = "dynamic-rendering")] dynamic_rendering: DynamicRendering,
         imgui: &mut Context,
         options: Option<Options>,
     ) -> RendererResult<Self> {
@@ -172,7 +184,7 @@ impl Renderer {
             #[cfg(not(feature = "dynamic-rendering"))]
             render_pass,
             #[cfg(feature = "dynamic-rendering")]
-            color_attachment_format,
+            dynamic_rendering,
             imgui,
             options,
         )
@@ -193,7 +205,8 @@ impl Renderer {
     ///             commands: [vkCmdCopyBufferToImage](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html),
     ///             [vkCmdPipelineBarrier](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPipelineBarrier.html)
     /// * `command_pool` - A Vulkan command pool used to allocate command buffers to upload textures to the gpu.
-    /// * `render_pass` - The render pass used to render the gui.
+    /// * `render_pass` - *without dynamic-rendering feature* - The render pass used to render the gui.
+    /// * `dynamic_rendering` - *with dynamic-rendering feature* - Dynamic rendeing parameters
     /// * `imgui` - The imgui context.
     /// * `options` - Optional parameters of the renderer.
     ///
@@ -208,7 +221,7 @@ impl Renderer {
         queue: vk::Queue,
         command_pool: vk::CommandPool,
         #[cfg(not(feature = "dynamic-rendering"))] render_pass: vk::RenderPass,
-        #[cfg(feature = "dynamic-rendering")] color_attachment_format: vk::Format,
+        #[cfg(feature = "dynamic-rendering")] dynamic_rendering: DynamicRendering,
         imgui: &mut Context,
         options: Option<Options>,
     ) -> RendererResult<Self> {
@@ -220,7 +233,7 @@ impl Renderer {
             #[cfg(not(feature = "dynamic-rendering"))]
             render_pass,
             #[cfg(feature = "dynamic-rendering")]
-            color_attachment_format,
+            dynamic_rendering,
             imgui,
             options,
         )
@@ -232,7 +245,7 @@ impl Renderer {
         command_pool: vk::CommandPool,
         mut allocator: Allocator,
         #[cfg(not(feature = "dynamic-rendering"))] render_pass: vk::RenderPass,
-        #[cfg(feature = "dynamic-rendering")] color_attachment_format: vk::Format,
+        #[cfg(feature = "dynamic-rendering")] dynamic_rendering: DynamicRendering,
         imgui: &mut Context,
         options: Option<Options>,
     ) -> RendererResult<Self> {
@@ -257,7 +270,7 @@ impl Renderer {
             #[cfg(not(feature = "dynamic-rendering"))]
             render_pass,
             #[cfg(feature = "dynamic-rendering")]
-            color_attachment_format,
+            dynamic_rendering,
             options,
         )?;
 

@@ -9,6 +9,9 @@ pub(crate) use buffer::*;
 use std::{ffi::CString, mem};
 pub(crate) use texture::*;
 
+#[cfg(feature = "dynamic-rendering")]
+use crate::DynamicRendering;
+
 /// Return a `&[u8]` for any sized object passed in.
 pub(crate) unsafe fn any_as_u8_slice<T: Sized>(any: &T) -> &[u8] {
     let ptr = (any as *const T) as *const u8;
@@ -58,7 +61,7 @@ pub(crate) fn create_vulkan_pipeline(
     device: &Device,
     pipeline_layout: vk::PipelineLayout,
     #[cfg(not(feature = "dynamic-rendering"))] render_pass: vk::RenderPass,
-    #[cfg(feature = "dynamic-rendering")] color_attachment_format: vk::Format,
+    #[cfg(feature = "dynamic-rendering")] dynamic_rendering: DynamicRendering,
     options: Options,
 ) -> RendererResult<vk::Pipeline> {
     let entry_point_name = CString::new("main").unwrap();
@@ -195,10 +198,16 @@ pub(crate) fn create_vulkan_pipeline(
     let pipeline_info = pipeline_info.render_pass(render_pass);
 
     #[cfg(feature = "dynamic-rendering")]
-    let color_attachment_formats = [color_attachment_format];
+    let color_attachment_formats = [dynamic_rendering.color_attachment_format];
     #[cfg(feature = "dynamic-rendering")]
-    let mut rendering_info = vk::PipelineRenderingCreateInfo::builder()
-        .color_attachment_formats(&color_attachment_formats);
+    let mut rendering_info = {
+        let mut rendering_info = vk::PipelineRenderingCreateInfo::builder()
+            .color_attachment_formats(&color_attachment_formats);
+        if let Some(depth_attachment_format) = dynamic_rendering.depth_attachment_format {
+            rendering_info = rendering_info.depth_attachment_format(depth_attachment_format);
+        }
+        rendering_info
+    };
     #[cfg(feature = "dynamic-rendering")]
     let pipeline_info = pipeline_info.push_next(&mut rendering_info);
 

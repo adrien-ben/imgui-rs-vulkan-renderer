@@ -73,8 +73,8 @@ vk-mem = { git = "https://github.com/adrien-ben/vk-mem-rs", tag = "0.2.3-ash-0.3
 ### dynamic-rendering
 
 This feature is useful if you want to integrate the library in an app making use of Vulkan's dynamic rendering.
-When enabled, functions that usually takes a `vk::RenderPass` as argument will now take a `vk::Format` which is
-the format of the color attachment the UI will be drawn to.
+When enabled, functions that usually takes a `vk::RenderPass` as argument will now take a `DynamicRendering` which
+contains the format of the color attachment the UI will be drawn to and an optional depth attachment format.
 
 ## Integration
 

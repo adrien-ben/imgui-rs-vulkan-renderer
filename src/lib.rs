@@ -49,7 +49,7 @@
 //!
 //! This feature adds support for [vk-mem-rs][vk-mem-rs]. It adds `Renderer::with_vk_mem_allocator` which takes
 //! a `Arc<Mutex<vk_mem::Allocator>>`. All internal allocator are then done using the allocator.
-//! 
+//!
 //! ### dynamic-rendering
 //!
 //! This feature is useful if you want to integrate the library in an app making use of Vulkan's dynamic rendering.

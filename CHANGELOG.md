@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.0
+
+- Bump gpu-allocator to 0.19
+- **BREAKING** (only with dynamic-rendering feature) Allow passing depth attachment format through `DynamicRendering` struct
+
 ## 1.4.0
 
 - Add support for Vulkan dynamic rendering
