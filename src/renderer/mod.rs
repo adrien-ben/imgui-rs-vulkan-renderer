@@ -122,8 +122,6 @@ impl Renderer {
         imgui: &mut Context,
         options: Option<Options>,
     ) -> RendererResult<Self> {
-        use ash::extensions::khr::DynamicRendering;
-
         let memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
