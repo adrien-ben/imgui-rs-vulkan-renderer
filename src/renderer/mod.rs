@@ -646,7 +646,7 @@ impl Frames {
         count: usize,
     ) -> RendererResult<Self> {
         let meshes = (0..count)
-            .map(|_| Mesh::new(device, allocator, draw_data))
+            .map(|_| Mesh::new(device, allocator, draw_data, count))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
             index: 0,
@@ -686,6 +686,8 @@ mod mesh {
         pub indices: vk::Buffer,
         indices_mem: Memory,
         index_count: usize,
+        to_be_destroyed: Vec<(usize, vk::Buffer, Memory)>,
+        in_flight: usize,
     }
 
     impl Mesh {
@@ -693,6 +695,7 @@ mod mesh {
             device: &Device,
             allocator: &mut Allocator,
             draw_data: &DrawData,
+            in_flight: usize,
         ) -> RendererResult<Self> {
             let vertices = create_vertices(draw_data);
             let vertex_count = vertices.len();
@@ -722,6 +725,8 @@ mod mesh {
                 indices,
                 indices_mem,
                 index_count,
+                to_be_destroyed: vec![],
+                in_flight,
             })
         }
 
@@ -732,6 +737,19 @@ mod mesh {
             draw_data: &DrawData,
         ) -> RendererResult<()> {
             let vertices = create_vertices(draw_data);
+            if self.in_flight > 0 as usize {
+                self.to_be_destroyed = std::mem::take(&mut self.to_be_destroyed)
+                    .into_iter()
+                    .filter_map(|(frame, buffer, memory)| {
+                        if frame > 0 as usize {
+                            Some((frame - 1, buffer, memory))
+                        } else {
+                            allocator.destroy_buffer(device, buffer, memory);
+                            None
+                        }
+                    })
+                    .collect::<Vec<(usize, vk::Buffer, Memory)>>();
+            }
             if draw_data.total_vtx_count as usize > self.vertex_count {
                 log::trace!("Resizing vertex buffers");
 
@@ -747,7 +765,12 @@ mod mesh {
 
                 let old_vertices_mem = std::mem::replace(&mut self.vertices_mem, vertices_mem);
 
-                allocator.destroy_buffer(device, old_vertices, old_vertices_mem)?;
+                if self.in_flight > 1 as usize {
+                    self.to_be_destroyed
+                        .push((self.in_flight, old_vertices, old_vertices_mem));
+                } else {
+                    allocator.destroy_buffer(device, old_vertices, old_vertices_mem)?;
+                }
             }
             allocator.update_buffer(device, &self.vertices_mem, &vertices)?;
 
@@ -767,7 +790,12 @@ mod mesh {
 
                 let old_indices_mem = std::mem::replace(&mut self.indices_mem, indices_mem);
 
-                allocator.destroy_buffer(device, old_indices, old_indices_mem)?;
+                if self.in_flight > 1 as usize {
+                    self.to_be_destroyed
+                        .push((self.in_flight, old_indices, old_indices_mem));
+                } else {
+                    allocator.destroy_buffer(device, old_indices, old_indices_mem)?;
+                }
             }
             allocator.update_buffer(device, &self.indices_mem, &indices)?;
 
