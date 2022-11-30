@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.0
+
+- Bump imgui to 0.9
+- Allow gpu-allocator >= 0.19 & <= 0.21
+- Update examples and bump dev dependencies
+
 ## 1.5.0
 
 - Bump gpu-allocator to 0.19
