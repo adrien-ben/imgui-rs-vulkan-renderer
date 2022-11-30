@@ -10,11 +10,12 @@ const APP_NAME: &str = "progress bar";
 fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init()?;
     System::new(APP_NAME)?.run((), |run, ui, _| {
-        let w = Window::new("Progress bar")
+        let w = ui
+            .window("Progress bar")
             .opened(run)
             .position([20.0, 20.0], Condition::Appearing)
             .size([700.0, 200.0], Condition::Appearing);
-        w.build(ui, || {
+        w.build(|| {
             ui.text("This is a simple progress bar:");
             ProgressBar::new(0.5).build(ui);
 

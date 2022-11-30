@@ -274,7 +274,7 @@ impl Renderer {
 
         // Fonts texture
         let fonts_texture = {
-            let mut fonts = imgui.fonts();
+            let fonts = imgui.fonts();
             let atlas_texture = fonts.build_rgba32_texture();
 
             Texture::from_rgba8(
@@ -403,7 +403,7 @@ impl Renderer {
     ) -> RendererResult<()> {
         // Generate the new fonts texture
         let fonts_texture = {
-            let mut fonts = imgui.fonts();
+            let fonts = imgui.fonts();
             let atlas_texture = fonts.build_rgba32_texture();
 
             Texture::from_rgba8(

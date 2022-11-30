@@ -12,9 +12,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut value = 0;
     let choices = ["test test this is 1", "test test this is 2"];
     System::new(APP_NAME)?.run((), move |_, ui, _| {
-        Window::new("Hello world")
-            .size([300.0, 100.0], Condition::FirstUseEver)
-            .build(ui, || {
+        ui.window("Hello world")
+            .size([300.0, 110.0], Condition::FirstUseEver)
+            .build(|| {
                 ui.text_wrapped("Hello world!");
                 ui.text_wrapped("こんにちは世界！");
                 if ui.button(choices[value]) {

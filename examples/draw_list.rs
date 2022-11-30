@@ -48,10 +48,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             );
         }
 
-        Window::new("Draw list")
+        ui.window("Draw list")
             .size([300.0, 110.0], Condition::FirstUseEver)
             .scroll_bar(false)
-            .build(ui, || {
+            .build(|| {
                 ui.button("random button");
                 let draw_list = ui.get_window_draw_list();
                 let o = ui.cursor_screen_pos();
@@ -83,6 +83,46 @@ fn main() -> Result<(), Box<dyn Error>> {
                     "window draw list",
                     [1.0, 1.0, 1.0],
                 );
+            });
+
+        ui.window("Polygons")
+            .size([300.0, 150.0], Condition::FirstUseEver)
+            .position([400.0, 110.0], Condition::FirstUseEver)
+            .scroll_bar(false)
+            .build(|| {
+                let draw_list = ui.get_window_draw_list();
+
+                // Origin
+                let o = ui.cursor_screen_pos();
+
+                draw_list
+                    .add_polyline(
+                        vec![
+                            [o[0] + 0.0, o[1] + 0.0],
+                            [o[0] + 100.0, o[1] + 25.0],
+                            [o[0] + 50.0, o[1] + 50.0],
+                            [o[0] + 100.0, o[1] + 75.0],
+                            [o[0] + 0.0, o[1] + 100.0],
+                            [o[0] + 0.0, o[1] + 0.0],
+                        ],
+                        [1.0, 0.0, 1.0],
+                    )
+                    .build();
+
+                draw_list
+                    .add_polyline(
+                        vec![
+                            [o[0] + 120.0 + 0.0, o[1] + 0.0],
+                            [o[0] + 120.0 + 100.0, o[1] + 25.0],
+                            [o[0] + 120.0 + 50.0, o[1] + 50.0],
+                            [o[0] + 120.0 + 100.0, o[1] + 75.0],
+                            [o[0] + 120.0 + 0.0, o[1] + 100.0],
+                            [o[0] + 120.0 + 0.0, o[1] + 0.0],
+                        ],
+                        [0.0, 1.0, 1.0],
+                    )
+                    .filled(true)
+                    .build();
             });
     })?;
 

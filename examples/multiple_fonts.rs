@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     system.update_fonts_texture()?;
 
     system.run((), move |run, ui, _| {
-        Window::new("Hello world").opened(run).build(ui, || {
+        ui.window("Hello world").opened(run).build(|| {
             ui.text("Hello, I'm the default font!");
             let _roboto = ui.push_font(roboto);
             ui.text("Hello, I'm Roboto Regular!");

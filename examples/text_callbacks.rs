@@ -13,9 +13,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut buffers = vec![String::default(), String::default(), String::default()];
 
     System::new(APP_NAME)?.run((), move |_, ui, _| {
-        Window::new("Input text callbacks")
+        ui.window("Input text callbacks")
             .size([500.0, 300.0], Condition::FirstUseEver)
-            .build(ui, || {
+            .build(|| {
                 ui.text("You can make a variety of buffer callbacks on an Input Text");
                 ui.text(
                     "or on an InputTextMultiline. In this example, we'll use \
@@ -45,19 +45,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                         println!("Char filter fired! This means a char was inputted.");
                         Some(c)
                     }
-                    fn on_completion(&mut self, _: TextCallbackData<'_>) {
+                    fn on_completion(&mut self, _: TextCallbackData) {
                         println!("Completion request fired! This means the tab key was hit.");
                     }
 
-                    fn on_edit(&mut self, _: TextCallbackData<'_>) {
+                    fn on_edit(&mut self, _: TextCallbackData) {
                         println!("Edit was fired! Any edit will cause this to fire.")
                     }
 
-                    fn on_history(&mut self, dir: HistoryDirection, _: TextCallbackData<'_>) {
+                    fn on_history(&mut self, dir: HistoryDirection, _: TextCallbackData) {
                         println!("History was fired by pressing {:?}", dir);
                     }
 
-                    fn on_always(&mut self, _: TextCallbackData<'_>) {
+                    fn on_always(&mut self, _: TextCallbackData) {
                         // We don't actually print this out because it will flood your log a lot!
                         // println!("The always callback fired! It always fires.");
                     }
@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 struct Wrapper<'a>(&'a mut String);
                 impl<'a> InputTextCallbackHandler for Wrapper<'a> {
-                    fn on_always(&mut self, data: TextCallbackData<'_>) {
+                    fn on_always(&mut self, data: TextCallbackData) {
                         *self.0 = data.str().to_owned();
                     }
                 }
@@ -105,11 +105,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 struct Wrapper2<'a>(&'a str, &'a str);
 
                 impl<'a> InputTextCallbackHandler for Wrapper2<'a> {
-                    fn on_history(
-                        &mut self,
-                        dir: HistoryDirection,
-                        mut data: TextCallbackData<'_>,
-                    ) {
+                    fn on_history(&mut self, dir: HistoryDirection, mut data: TextCallbackData) {
                         match dir {
                             HistoryDirection::Up => {
                                 // remove first char...

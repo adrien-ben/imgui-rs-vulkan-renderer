@@ -16,9 +16,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut click_count = 0;
 
     System::new(APP_NAME)?.run((), move |_, ui, _| {
-        Window::new("Disabling widgets")
+        ui.window("Disabling widgets")
             .size([300.0, 200.0], Condition::FirstUseEver)
-            .build(ui, || {
+            .build(|| {
                 ui.checkbox("Edit mode", &mut edit_mode);
                 ui.checkbox("Safe mode", &mut safe_mode);
 

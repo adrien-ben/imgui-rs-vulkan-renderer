@@ -13,11 +13,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         render_closable: true,
     };
     System::new(APP_NAME)?.run((), move |run, ui, _| {
-        let w = Window::new("Collapsing header")
+        let w = ui
+            .window("Collapsing header")
             .opened(run)
             .position([20.0, 20.0], Condition::Appearing)
             .size([700.0, 500.0], Condition::Appearing);
-        w.build(ui, || {
+        w.build(|| {
             if CollapsingHeader::new("I'm a collapsing header. Click me!").build(ui) {
                 ui.text(
                     "A collapsing header can be used to toggle rendering of a group of widgets",

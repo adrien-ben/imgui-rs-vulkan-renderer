@@ -10,6 +10,7 @@ use ash::{
 use imgui::*;
 use imgui_rs_vulkan_renderer::*;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use std::{
     error::Error,
     ffi::{CStr, CString},
@@ -294,7 +295,7 @@ impl<A: App> System<A> {
                     let mut ui = imgui.frame();
                     ui_builder(&mut run, &mut ui, &mut app);
                     platform.prepare_render(&ui, &window);
-                    let draw_data = ui.render();
+                    let draw_data = imgui.render();
 
                     if !run {
                         return;
@@ -461,7 +462,15 @@ impl VulkanContext {
 
         // Vulkan surface
         let surface = Surface::new(&entry, &instance);
-        let surface_khr = unsafe { ash_window::create_surface(&entry, &instance, window, None)? };
+        let surface_khr = unsafe {
+            ash_window::create_surface(
+                &entry,
+                &instance,
+                window.raw_display_handle(),
+                window.raw_window_handle(),
+                None,
+            )?
+        };
 
         // Vulkan physical device and queue families indices (graphics and present)
         let (physical_device, graphics_q_index, present_q_index) =
@@ -629,7 +638,8 @@ fn create_vulkan_instance(
         .engine_version(vk::make_api_version(0, 0, 1, 0))
         .api_version(vk::make_api_version(0, 1, 0, 0));
 
-    let mut extension_names = ash_window::enumerate_required_extensions(window)?.to_vec();
+    let mut extension_names =
+        ash_window::enumerate_required_extensions(window.raw_display_handle())?.to_vec();
     extension_names.push(DebugUtils::name().as_ptr());
 
     let instance_create_info = vk::InstanceCreateInfo::builder()

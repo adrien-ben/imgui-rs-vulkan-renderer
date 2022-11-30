@@ -6,6 +6,9 @@
 //!
 //! | crate | imgui | ash          | gpu-allocator (feature) | vk-mem (feature)                        |
 //! |-------|-------|--------------|-------------------------|-----------------------------------------|
+//! | 1.6.0 | 0.9   | [0.34, 0.37] | 0.19                    | 0.2.3 ([forked][forked-mem-rs-034-037]) |
+//! | 1.5.0 | 0.8   | [0.34, 0.37] | 0.19                    | 0.2.3 ([forked][forked-mem-rs-034-037]) |
+//! | 1.4.0 | 0.8   | [0.34, 0.37] | 0.18                    | 0.2.3 ([forked][forked-mem-rs-034-037]) |
 //! | 1.3.0 | 0.8   | [0.34, 0.37] | 0.18                    | 0.2.3 ([forked][forked-mem-rs-034-037]) |
 //! | 1.2.0 | 0.8   | 0.36         | 0.17                    | 0.2.3 ([forked][forked-mem-rs-036])     |
 //! | 1.1.x | 0.8   | 0.35         | 0.15                    | 0.2.3 ([forked][forked-mem-rs-035])     |
@@ -100,16 +103,19 @@
 //! ## Example can be one of the following value:
 //! ## - collapsing_header
 //! ## - color_button
+//! ## - creating_windows
 //! ## - custom_textures
 //! ## - disablement
 //! ## - draw_list
 //! ## - hello_world
+//! ## - id_wrangling
 //! ## - keyboard
 //! ## - long_list
-//! ## - multiple fonts
+//! ## - long_table
+//! ## - multiple_fonts
 //! ## - progress_bar
 //! ## - radio_button
-//! ## - slider : TODO: crashes
+//! ## - slider
 //! ## - tables_api
 //! ## - test_drawing_channels_split
 //! ## - test_window_impl
