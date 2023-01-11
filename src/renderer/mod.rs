@@ -553,8 +553,8 @@ impl Renderer {
 
                             let scissors = [vk::Rect2D {
                                 offset: vk::Offset2D {
-                                    x: clip_x as _,
-                                    y: clip_y as _,
+                                    x: (clip_x as i32).max(0),
+                                    y: (clip_y as i32).max(0),
                                 },
                                 extent: vk::Extent2D {
                                     width: clip_w as _,

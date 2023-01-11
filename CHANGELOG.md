@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.1
+
+- Avoid passing negative values to `cmd_set_scissor`
+
 ## 1.6.0
 
 - Bump imgui to 0.9
