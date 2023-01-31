@@ -1,7 +1,7 @@
 use crate::{RendererError, RendererResult};
 use ash::{vk, Device};
 use gpu_allocator::{
-    vulkan::{Allocation, AllocationCreateDesc, Allocator as GpuAllocator},
+    vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator as GpuAllocator},
     MemoryLocation,
 };
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -52,6 +52,7 @@ impl Allocate for Allocator {
             requirements,
             location: MemoryLocation::CpuToGpu,
             linear: true,
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
         })?;
 
         unsafe { device.bind_buffer_memory(buffer, allocation.memory(), allocation.offset())? };
@@ -94,6 +95,7 @@ impl Allocate for Allocator {
             requirements,
             location: MemoryLocation::GpuOnly,
             linear: true,
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
         })?;
 
         unsafe { device.bind_image_memory(image, allocation.memory(), allocation.offset())? };
