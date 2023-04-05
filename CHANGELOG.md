@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.0
+
+- Bump imgui to 0.11
+
 ## 1.8.0
 
 - Bump gpu-allocator to 0.22
