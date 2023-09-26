@@ -144,6 +144,7 @@ impl<A: App> System<A> {
                 physical_device: vulkan_context.physical_device,
                 debug_settings: Default::default(),
                 buffer_device_address: false,
+                allocation_sizes: Default::default(),
             })?;
 
             Renderer::with_gpu_allocator(

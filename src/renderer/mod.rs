@@ -288,7 +288,7 @@ impl Renderer {
             )?
         };
 
-        let mut fonts = imgui.fonts();
+        let fonts = imgui.fonts();
         fonts.tex_id = TextureId::from(usize::MAX);
 
         // Descriptor pool
@@ -417,7 +417,7 @@ impl Renderer {
             )?
         };
 
-        let mut fonts = imgui.fonts();
+        let fonts = imgui.fonts();
         fonts.tex_id = TextureId::from(usize::MAX);
 
         // Free Descriptor set the create a new one

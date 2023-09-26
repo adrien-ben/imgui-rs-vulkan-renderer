@@ -137,7 +137,7 @@ impl Allocate for Allocator {
         memory: &Self::Memory,
         data: &[T],
     ) -> RendererResult<()> {
-        let size = (data.len() * std::mem::size_of::<T>()) as _;
+        let size = std::mem::size_of_val(data) as _;
         unsafe {
             let data_ptr = memory
                 .mapped_ptr()
