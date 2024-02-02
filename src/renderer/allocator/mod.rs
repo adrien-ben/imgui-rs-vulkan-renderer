@@ -91,7 +91,7 @@ pub trait Allocate {
     fn update_buffer<T: Copy>(
         &mut self,
         device: &Device,
-        memory: &Self::Memory,
+        memory: &mut Self::Memory,
         data: &[T],
     ) -> RendererResult<()>;
 }

@@ -13,6 +13,7 @@ A Vulkan renderer for [imgui-rs][imgui-rs] using [Ash][ash].
 
 | crate  | imgui | ash          | gpu-allocator (feature) | vk-mem (feature)                        |
 |--------|-------|--------------|-------------------------|-----------------------------------------|
+| 1.12.0 | 0.11  | [0.34, 0.37] | 0.25                    | 0.3.0                                   |
 | 1.11.0 | 0.11  | [0.34, 0.37] | 0.25                    | 0.2.3 ([forked][forked-mem-rs-034-037]) |
 | 1.10.0 | 0.11  | [0.34, 0.37] | 0.23                    | 0.2.3 ([forked][forked-mem-rs-034-037]) |
 | 1.9.0  | 0.11  | [0.34, 0.37] | 0.22                    | 0.2.3 ([forked][forked-mem-rs-034-037]) |
@@ -64,14 +65,6 @@ a `Arc<Mutex<gpu_allocator::vulkan::Allocator>>`. All internal allocator are the
 
 This feature adds support for [vk-mem-rs][vk-mem-rs]. It adds `Renderer::with_vk_mem_allocator` which takes
 a `Arc<Mutex<vk_mem::Allocator>>`. All internal allocator are then done using the allocator.
-
-Since we cannot publish a crate with patched dependencies you'll need to patch it on your end by adding this to your
-Cargo.toml file
-
-```toml
-[patch.crates-io]
-vk-mem = { git = "https://github.com/adrien-ben/vk-mem-rs", tag = "0.2.3-ash-0.34-0.37" }
-```
 
 > I'm still not sure with the `Arc<Mutex<...>>` stuff. It works for me but i'm unsure it'a the best way to go.
 > Any suggestion is welcome.

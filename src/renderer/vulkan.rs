@@ -310,8 +310,8 @@ mod buffer {
         T: Copy,
     {
         let size = std::mem::size_of_val(data);
-        let (buffer, memory) = allocator.create_buffer(device, size, usage)?;
-        allocator.update_buffer(device, &memory, data)?;
+        let (buffer, mut memory) = allocator.create_buffer(device, size, usage)?;
+        allocator.update_buffer(device, &mut memory, data)?;
         Ok((buffer, memory))
     }
 }

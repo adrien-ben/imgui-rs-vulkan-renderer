@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.0
+
+- Bump vk-mem to 0.3.0
+
 ## 1.11.0
 
 - Bump gpu-allocator to 0.25 by @nice-sprite in #38

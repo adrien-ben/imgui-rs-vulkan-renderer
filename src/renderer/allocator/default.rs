@@ -140,10 +140,10 @@ impl Allocate for Allocator {
     fn update_buffer<T: Copy>(
         &mut self,
         device: &Device,
-        memory: &Self::Memory,
+        memory: &mut Self::Memory,
         data: &[T],
     ) -> RendererResult<()> {
-        let size = (data.len() * std::mem::size_of::<T>()) as _;
+        let size = std::mem::size_of_val(data) as _;
         unsafe {
             let data_ptr = device.map_memory(*memory, 0, size, vk::MemoryMapFlags::empty())?;
             let mut align = ash::util::Align::new(data_ptr, std::mem::align_of::<T>() as _, size);

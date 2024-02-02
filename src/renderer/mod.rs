@@ -749,7 +749,7 @@ mod mesh {
 
                 allocator.destroy_buffer(device, old_vertices, old_vertices_mem)?;
             }
-            allocator.update_buffer(device, &self.vertices_mem, &vertices)?;
+            allocator.update_buffer(device, &mut self.vertices_mem, &vertices)?;
 
             let indices = create_indices(draw_data);
             if draw_data.total_idx_count as usize > self.index_count {
@@ -769,7 +769,7 @@ mod mesh {
 
                 allocator.destroy_buffer(device, old_indices, old_indices_mem)?;
             }
-            allocator.update_buffer(device, &self.indices_mem, &indices)?;
+            allocator.update_buffer(device, &mut self.indices_mem, &indices)?;
 
             Ok(())
         }

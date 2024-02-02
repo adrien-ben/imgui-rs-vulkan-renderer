@@ -2,7 +2,10 @@ use super::Allocate;
 use crate::{RendererError, RendererResult};
 use ash::{vk, Device};
 use std::sync::{Arc, Mutex, MutexGuard};
-use vk_mem::{Allocation, AllocationCreateInfo, Allocator as GpuAllocator, MemoryUsage};
+use vk_mem::{
+    Alloc, Allocation, AllocationCreateFlags, AllocationCreateInfo, Allocator as GpuAllocator,
+    MemoryUsage,
+};
 
 /// Abstraction over memory used by Vulkan resources.
 pub type Memory = Allocation;
@@ -38,13 +41,16 @@ impl Allocate for Allocator {
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .build();
 
-        let buffer_alloc_info = AllocationCreateInfo::new().usage(MemoryUsage::CpuOnly);
+        let buffer_alloc_info = AllocationCreateInfo {
+            usage: MemoryUsage::AutoPreferHost,
+            flags: AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE,
+            ..Default::default()
+        };
 
         let allocator = self.get_allocator()?;
 
-        let (buffer, allocation, buffer_alloc_info) =
+        let (buffer, allocation) =
             unsafe { allocator.create_buffer(&buffer_info, &buffer_alloc_info)? };
-        log::debug!("Allocated buffer. Allocation info: {buffer_alloc_info:?}");
 
         Ok((buffer, allocation))
     }
@@ -74,13 +80,15 @@ impl Allocate for Allocator {
             .samples(vk::SampleCountFlags::TYPE_1)
             .flags(vk::ImageCreateFlags::empty());
 
-        let image_alloc_info = AllocationCreateInfo::new().usage(MemoryUsage::GpuOnly);
+        let image_alloc_info = AllocationCreateInfo {
+            usage: MemoryUsage::AutoPreferDevice,
+            ..Default::default()
+        };
 
         let allocator = self.get_allocator()?;
 
-        let (image, allocation, image_alloc_info) =
+        let (image, allocation) =
             unsafe { allocator.create_image(&image_info, &image_alloc_info)? };
-        log::debug!("Allocated image. Allocation info: {image_alloc_info:?}");
 
         Ok((image, allocation))
     }
@@ -89,11 +97,11 @@ impl Allocate for Allocator {
         &mut self,
         _device: &Device,
         buffer: vk::Buffer,
-        memory: Self::Memory,
+        mut memory: Self::Memory,
     ) -> RendererResult<()> {
         let allocator = self.get_allocator()?;
 
-        unsafe { allocator.destroy_buffer(buffer, memory) };
+        unsafe { allocator.destroy_buffer(buffer, &mut memory) };
 
         Ok(())
     }
@@ -102,11 +110,11 @@ impl Allocate for Allocator {
         &mut self,
         _device: &Device,
         image: vk::Image,
-        memory: Self::Memory,
+        mut memory: Self::Memory,
     ) -> RendererResult<()> {
         let allocator = self.get_allocator()?;
 
-        unsafe { allocator.destroy_image(image, memory) };
+        unsafe { allocator.destroy_image(image, &mut memory) };
 
         Ok(())
     }
@@ -114,17 +122,17 @@ impl Allocate for Allocator {
     fn update_buffer<T: Copy>(
         &mut self,
         _device: &Device,
-        memory: &Self::Memory,
+        memory: &mut Self::Memory,
         data: &[T],
     ) -> RendererResult<()> {
-        let size = (data.len() * std::mem::size_of::<T>()) as _;
+        let size = std::mem::size_of_val(data) as _;
 
         let allocator = self.get_allocator()?;
-        let data_ptr = unsafe { allocator.map_memory(*memory)? as *mut std::ffi::c_void };
+        let data_ptr = unsafe { allocator.map_memory(memory)? as *mut std::ffi::c_void };
         let mut align =
             unsafe { ash::util::Align::new(data_ptr, std::mem::align_of::<T>() as _, size) };
         align.copy_from_slice(data);
-        unsafe { allocator.unmap_memory(*memory) };
+        unsafe { allocator.unmap_memory(memory) };
 
         Ok(())
     }
