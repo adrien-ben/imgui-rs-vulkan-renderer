@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.0
+
+- Bump gpu-allocator to 0.25 by @nice-sprite in #38
+
 ## 1.10.0
 
 - Bump gpu-allocator to 0.23

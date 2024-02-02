@@ -13,6 +13,7 @@ A Vulkan renderer for [imgui-rs][imgui-rs] using [Ash][ash].
 
 | crate  | imgui | ash          | gpu-allocator (feature) | vk-mem (feature)                        |
 |--------|-------|--------------|-------------------------|-----------------------------------------|
+| 1.11.0 | 0.11  | [0.34, 0.37] | 0.25                    | 0.2.3 ([forked][forked-mem-rs-034-037]) |
 | 1.10.0 | 0.11  | [0.34, 0.37] | 0.23                    | 0.2.3 ([forked][forked-mem-rs-034-037]) |
 | 1.9.0  | 0.11  | [0.34, 0.37] | 0.22                    | 0.2.3 ([forked][forked-mem-rs-034-037]) |
 | 1.8.0  | 0.10  | [0.34, 0.37] | 0.22                    | 0.2.3 ([forked][forked-mem-rs-034-037]) |
