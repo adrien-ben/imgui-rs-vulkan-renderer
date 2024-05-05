@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.13.0
+
+- Bump imgui to 0.12
+- Bump gpu-allocator to 0.26
+- Bump dev dependencies
+
 ## 1.12.0
 
 - Bump vk-mem to 0.3.0

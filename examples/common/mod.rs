@@ -168,8 +168,7 @@ impl<A: App> System<A> {
                     &vulkan_context.instance,
                     &vulkan_context.device,
                     vulkan_context.physical_device,
-                )
-                .vulkan_api_version(vk::make_api_version(0, 1, 0, 0));
+                );
 
                 Allocator::new(allocator_create_info)?
             };
@@ -257,10 +256,8 @@ impl<A: App> System<A> {
         let mut dirty_swapchain = false;
 
         // Main loop
-        event_loop.run(move |event, _, control_flow| {
+        event_loop.run(move |event, elwt| {
             let mut renderer = &mut renderer; // Makes sure Renderer is moved before VulkanContext and therefore dropped before
-
-            *control_flow = ControlFlow::Poll;
 
             platform.handle_event(imgui.io_mut(), &window, &event);
 
@@ -272,7 +269,7 @@ impl<A: App> System<A> {
                     last_frame = now;
                 }
                 // End of event processing
-                Event::MainEventsCleared => {
+                Event::AboutToWait => {
                     // If swapchain must be recreated wait for windows to not be minimized anymore
                     if dirty_swapchain {
                         let PhysicalSize { width, height } = window.inner_size();
@@ -299,6 +296,7 @@ impl<A: App> System<A> {
                     let draw_data = imgui.render();
 
                     if !run {
+                        elwt.exit();
                         return;
                     }
 
@@ -400,9 +398,11 @@ impl<A: App> System<A> {
                 Event::WindowEvent {
                     event: WindowEvent::CloseRequested,
                     ..
-                } => run = false,
+                } => {
+                    elwt.exit();
+                }
                 // Cleanup
-                Event::LoopDestroyed => {
+                Event::LoopExiting => {
                     log::info!("Stopping application");
 
                     unsafe {
@@ -430,11 +430,9 @@ impl<A: App> System<A> {
                 }
                 _ => (),
             }
+        })?;
 
-            if !run {
-                *control_flow = ControlFlow::Exit;
-            }
-        });
+        Ok(())
     }
 }
 
@@ -613,7 +611,8 @@ impl Swapchain {
 
 fn create_window(title: &str) -> Result<(Window, EventLoop<()>), Box<dyn Error>> {
     log::debug!("Creating window and event loop");
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::new()?;
+    event_loop.set_control_flow(ControlFlow::Poll);
     let window = WindowBuilder::new()
         .with_title(title)
         .with_inner_size(PhysicalSize::new(WIDTH, HEIGHT))

@@ -7,23 +7,20 @@ homepage = "https://github.com/adrien-ben/imgui-rs-vulkan-renderer"
 repository = "https://github.com/adrien-ben/imgui-rs-vulkan-renderer"
 documentation = "https://docs.rs/imgui-rs-vulkan-renderer"
 license = "MIT"
-version = "1.12.0"
+version = "1.13.0"
 authors = ["Adrien Bennadji <adrien.bennadji@live.fr>"]
 edition = "2018"
 
-exclude = [
-    "assets/*",
-    "compile_shaders.*"
-]
+include = ["/src", "LICENSE", "README.md", "CHANGELOG.md"]
 
 [dependencies]
 thiserror = "1.0"
 log = "0.4"
-imgui = "^0.11"
+imgui = "^0.12"
 ash = { version = ">=0.34, <=0.37", default-features = false, features = ["debug"] }
 ultraviolet = "0.9"
 
-gpu-allocator = { version = "0.25", default-features = false, features = ["vulkan"], optional = true }
+gpu-allocator = { version = "0.26", default-features = false, features = ["vulkan"], optional = true }
 
 vk-mem = { version = "0.3", optional = true }
 
@@ -31,12 +28,12 @@ vk-mem = { version = "0.3", optional = true }
 dynamic-rendering = []
 
 [dev-dependencies]
-simple_logger = "4.0"
-winit = "0.27"
-imgui = { version = "^0.11", features = ["tables-api"] }
-imgui-winit-support = "^0.11"
+simple_logger = "5.0"
+winit = { version = "0.29", default-features = false, features = ["rwh_05", "x11", "wayland", "wayland-dlopen", "wayland-csd-adwaita"]}
+imgui = { version = "^0.12", features = ["tables-api"] }
+imgui-winit-support = "^0.12"
 ash = { version = "0.37", default-features = false, features = ["debug", "linked"] }
 ash-window = "0.12"
 raw-window-handle = "0.5"
-image = "0.24"
+image = "0.25"
 imgui-rs-vulkan-renderer = { path = ".", features = ["gpu-allocator"] }
