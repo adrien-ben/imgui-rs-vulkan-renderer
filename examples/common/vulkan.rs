@@ -14,7 +14,7 @@ mod buffer {
         usage: vk::BufferUsageFlags,
         mem_properties: vk::PhysicalDeviceMemoryProperties,
     ) -> RendererResult<(vk::Buffer, vk::DeviceMemory)> {
-        let size = data.len() * mem::size_of::<T>();
+        let size = mem::size_of_val(data);
         let (buffer, memory) = create_buffer(size, device, usage, mem_properties)?;
         update_buffer_content(device, memory, data)?;
         Ok((buffer, memory))
@@ -55,12 +55,12 @@ mod buffer {
         data: &[T],
     ) -> RendererResult<()> {
         unsafe {
-            let size = (data.len() * mem::size_of::<T>()) as _;
+            let size = mem::size_of_val(data) as _;
 
             let data_ptr =
                 device.map_memory(buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
             let mut align = ash::util::Align::new(data_ptr, mem::align_of::<T>() as _, size);
-            align.copy_from_slice(&data);
+            align.copy_from_slice(data);
             device.unmap_memory(buffer_memory);
         };
         Ok(())
