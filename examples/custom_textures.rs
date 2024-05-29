@@ -69,7 +69,7 @@ impl CustomTexturesApp {
                     data.push(i as u8);
                     data.push(j as u8);
                     data.push((i + j) as u8);
-                    data.push(255 as u8);
+                    data.push(255_u8);
                 }
             }
 

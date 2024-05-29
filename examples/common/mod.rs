@@ -257,7 +257,8 @@ impl<A: App> System<A> {
 
         // Main loop
         event_loop.run(move |event, elwt| {
-            let mut renderer = &mut renderer; // Makes sure Renderer is moved before VulkanContext and therefore dropped before
+            // Make sure Renderer is moved before VulkanContext and therefore dropped before
+            let renderer = &mut renderer;
 
             platform.handle_event(imgui.io_mut(), &window, &event);
 
@@ -290,9 +291,9 @@ impl<A: App> System<A> {
                     platform
                         .prepare_frame(imgui.io_mut(), &window)
                         .expect("Failed to prepare frame");
-                    let mut ui = imgui.frame();
-                    ui_builder(&mut run, &mut ui, &mut app);
-                    platform.prepare_render(&ui, &window);
+                    let ui = imgui.frame();
+                    ui_builder(&mut run, ui, &mut app);
+                    platform.prepare_render(ui, &window);
                     let draw_data = imgui.render();
 
                     if !run {
@@ -344,8 +345,8 @@ impl<A: App> System<A> {
                         swapchain.framebuffers[image_index as usize],
                         swapchain.render_pass,
                         swapchain.extent,
-                        &mut renderer,
-                        &draw_data,
+                        renderer,
+                        draw_data,
                     )
                     .expect("Failed to record command buffer");
 
@@ -542,7 +543,7 @@ impl Swapchain {
     fn new(vulkan_context: &VulkanContext) -> Result<Self, Box<dyn Error>> {
         // Swapchain
         let (loader, khr, extent, format, images, image_views) =
-            create_vulkan_swapchain(&vulkan_context)?;
+            create_vulkan_swapchain(vulkan_context)?;
 
         // Renderpass
         let render_pass = create_vulkan_render_pass(&vulkan_context.device, format)?;
@@ -807,19 +808,18 @@ fn create_vulkan_device_and_graphics_and_present_qs(
     Ok((device, graphics_queue, present_queue))
 }
 
+type CreateSwapchainResult = (
+    SwapchainLoader,
+    vk::SwapchainKHR,
+    vk::Extent2D,
+    vk::Format,
+    Vec<vk::Image>,
+    Vec<vk::ImageView>,
+);
+
 fn create_vulkan_swapchain(
     vulkan_context: &VulkanContext,
-) -> Result<
-    (
-        SwapchainLoader,
-        vk::SwapchainKHR,
-        vk::Extent2D,
-        vk::Format,
-        Vec<vk::Image>,
-        Vec<vk::ImageView>,
-    ),
-    Box<dyn Error>,
-> {
+) -> Result<CreateSwapchainResult, Box<dyn Error>> {
     log::debug!("Creating vulkan swapchain");
     // Swapchain format
     let format = {
@@ -1020,6 +1020,7 @@ fn create_vulkan_framebuffers(
         .collect::<Result<Vec<_>, _>>()?)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn record_command_buffers(
     device: &Device,
     command_pool: vk::CommandPool,

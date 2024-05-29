@@ -10,7 +10,7 @@ const APP_NAME: &str = "text callbacks";
 fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init()?;
 
-    let mut buffers = vec![String::default(), String::default(), String::default()];
+    let mut buffers = [String::default(), String::default(), String::default()];
 
     System::new(APP_NAME)?.run((), move |_, ui, _| {
         ui.window("Input text callbacks")
@@ -76,7 +76,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 struct Wrapper<'a>(&'a mut String);
                 impl<'a> InputTextCallbackHandler for Wrapper<'a> {
                     fn on_always(&mut self, data: TextCallbackData) {
-                        *self.0 = data.str().to_owned();
+                        data.str().clone_into(self.0);
                     }
                 }
 
@@ -112,7 +112,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 if !data.str().is_empty() {
                                     data.remove_chars(0, 1);
 
-                                    if let Some((idx, _)) = data.str().char_indices().rev().next() {
+                                    if let Some((idx, _)) = data.str().char_indices().next_back() {
                                         data.remove_chars(idx, 1);
                                     }
                                 }
@@ -124,7 +124,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 }
 
                                 // insert last char
-                                if let Some((idx, _)) = self.1.char_indices().rev().next() {
+                                if let Some((idx, _)) = self.1.char_indices().next_back() {
                                     data.push_str(&self.1[idx..]);
                                 }
                             }
