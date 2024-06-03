@@ -1,9 +1,11 @@
 mod common;
+mod vulkan;
 
 use ash::{vk, Device, Instance};
 use common::*;
 use imgui::*;
 use imgui_rs_vulkan_renderer::vulkan::*;
+use vulkan::texture::*;
 
 use std::error::Error;
 

@@ -1,5 +1,3 @@
-mod vulkan;
-
 use ash::{
     extensions::{
         ext::DebugUtils,
@@ -18,7 +16,6 @@ use std::{
     os::raw::c_void,
     time::Instant,
 };
-pub use vulkan::*;
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
