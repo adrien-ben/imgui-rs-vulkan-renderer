@@ -56,6 +56,7 @@ pub struct System<A: App + 'static> {
     fence: vk::Fence,
 
     pub imgui: Context,
+    #[allow(dead_code)]
     pub font_size: f32,
     platform: WinitPlatform,
     pub renderer: Renderer,
