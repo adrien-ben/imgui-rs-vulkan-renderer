@@ -301,7 +301,7 @@ impl<A: App> System<A> {
                     unsafe {
                         vulkan_context
                             .device
-                            .wait_for_fences(&[fence], true, std::u64::MAX)
+                            .wait_for_fences(&[fence], true, u64::MAX)
                             .expect("Failed to wait ")
                     };
 
@@ -309,7 +309,7 @@ impl<A: App> System<A> {
                     let next_image_result = unsafe {
                         swapchain.loader.acquire_next_image(
                             swapchain.khr,
-                            std::u64::MAX,
+                            u64::MAX,
                             image_available_semaphore,
                             vk::Fence::null(),
                         )
@@ -872,7 +872,7 @@ fn create_vulkan_swapchain(
 
     // Swapchain extent
     let extent = {
-        if capabilities.current_extent.width != std::u32::MAX {
+        if capabilities.current_extent.width != u32::MAX {
             capabilities.current_extent
         } else {
             let min = capabilities.min_image_extent;
