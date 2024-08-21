@@ -44,11 +44,10 @@ impl Allocate for Allocator {
         size: usize,
         usage: vk::BufferUsageFlags,
     ) -> RendererResult<(vk::Buffer, Self::Memory)> {
-        let buffer_info = vk::BufferCreateInfo::builder()
+        let buffer_info = vk::BufferCreateInfo::default()
             .size(size as _)
             .usage(usage)
-            .sharing_mode(vk::SharingMode::EXCLUSIVE)
-            .build();
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         let buffer = unsafe { device.create_buffer(&buffer_info, None)? };
 
@@ -58,7 +57,7 @@ impl Allocate for Allocator {
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )?;
 
-        let alloc_info = vk::MemoryAllocateInfo::builder()
+        let alloc_info = vk::MemoryAllocateInfo::default()
             .allocation_size(mem_requirements.size)
             .memory_type_index(mem_type);
         let memory = unsafe { device.allocate_memory(&alloc_info, None)? };
@@ -79,7 +78,7 @@ impl Allocate for Allocator {
             depth: 1,
         };
 
-        let image_info = vk::ImageCreateInfo::builder()
+        let image_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
             .extent(extent)
             .mip_levels(1)
@@ -97,7 +96,7 @@ impl Allocate for Allocator {
         let mem_type_index =
             self.find_memory_type(mem_requirements, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
 
-        let alloc_info = vk::MemoryAllocateInfo::builder()
+        let alloc_info = vk::MemoryAllocateInfo::default()
             .allocation_size(mem_requirements.size)
             .memory_type_index(mem_type_index);
         let memory = unsafe {

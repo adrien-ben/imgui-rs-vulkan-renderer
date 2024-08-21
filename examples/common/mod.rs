@@ -1,14 +1,11 @@
 use ash::{
-    extensions::{
-        ext::DebugUtils,
-        khr::{Surface, Swapchain as SwapchainLoader},
-    },
+    ext::debug_utils,
+    khr::{surface, swapchain},
     vk, Device, Entry, Instance,
 };
 use imgui::*;
 use imgui_rs_vulkan_renderer::*;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use std::{
     error::Error,
     ffi::{CStr, CString},
@@ -20,6 +17,7 @@ use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
+    raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::{Window, WindowBuilder},
 };
 #[cfg(feature = "gpu-allocator")]
@@ -71,7 +69,7 @@ impl<A: App> System<A> {
         let vulkan_context = VulkanContext::new(&window, title)?;
 
         let command_buffer = {
-            let allocate_info = vk::CommandBufferAllocateInfo::builder()
+            let allocate_info = vk::CommandBufferAllocateInfo::default()
                 .command_pool(vulkan_context.command_pool)
                 .level(vk::CommandBufferLevel::PRIMARY)
                 .command_buffer_count(1);
@@ -87,7 +85,7 @@ impl<A: App> System<A> {
 
         // Semaphore use for presentation
         let image_available_semaphore = {
-            let semaphore_info = vk::SemaphoreCreateInfo::builder();
+            let semaphore_info = vk::SemaphoreCreateInfo::default();
             unsafe {
                 vulkan_context
                     .device
@@ -95,7 +93,7 @@ impl<A: App> System<A> {
             }
         };
         let render_finished_semaphore = {
-            let semaphore_info = vk::SemaphoreCreateInfo::builder();
+            let semaphore_info = vk::SemaphoreCreateInfo::default();
             unsafe {
                 vulkan_context
                     .device
@@ -103,7 +101,7 @@ impl<A: App> System<A> {
             }
         };
         let fence = {
-            let fence_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
+            let fence_info = vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
             unsafe { vulkan_context.device.create_fence(&fence_info, None)? }
         };
 
@@ -349,12 +347,11 @@ impl<A: App> System<A> {
                     .expect("Failed to record command buffer");
 
                     let command_buffers = [command_buffer];
-                    let submit_info = [vk::SubmitInfo::builder()
+                    let submit_info = [vk::SubmitInfo::default()
                         .wait_semaphores(&wait_semaphores)
                         .wait_dst_stage_mask(&wait_stages)
                         .command_buffers(&command_buffers)
-                        .signal_semaphores(&signal_semaphores)
-                        .build()];
+                        .signal_semaphores(&signal_semaphores)];
                     unsafe {
                         vulkan_context
                             .device
@@ -364,7 +361,7 @@ impl<A: App> System<A> {
 
                     let swapchains = [swapchain.khr];
                     let images_indices = [image_index];
-                    let present_info = vk::PresentInfoKHR::builder()
+                    let present_info = vk::PresentInfoKHR::default()
                         .wait_semaphores(&signal_semaphores)
                         .swapchains(&swapchains)
                         .image_indices(&images_indices);
@@ -438,9 +435,9 @@ impl<A: App> System<A> {
 pub struct VulkanContext {
     _entry: Entry,
     pub instance: Instance,
-    debug_utils: DebugUtils,
+    debug_utils: debug_utils::Instance,
     debug_utils_messenger: vk::DebugUtilsMessengerEXT,
-    surface: Surface,
+    surface: surface::Instance,
     surface_khr: vk::SurfaceKHR,
     pub physical_device: vk::PhysicalDevice,
     graphics_q_index: u32,
@@ -459,13 +456,13 @@ impl VulkanContext {
             create_vulkan_instance(&entry, window, name)?;
 
         // Vulkan surface
-        let surface = Surface::new(&entry, &instance);
+        let surface = surface::Instance::new(&entry, &instance);
         let surface_khr = unsafe {
             ash_window::create_surface(
                 &entry,
                 &instance,
-                window.raw_display_handle(),
-                window.raw_window_handle(),
+                window.display_handle().unwrap().into(),
+                window.window_handle().unwrap().into(),
                 None,
             )?
         };
@@ -489,7 +486,7 @@ impl VulkanContext {
 
         // Command pool & buffer
         let command_pool = {
-            let command_pool_info = vk::CommandPoolCreateInfo::builder()
+            let command_pool_info = vk::CommandPoolCreateInfo::default()
                 .queue_family_index(graphics_q_index)
                 .flags(vk::CommandPoolCreateFlags::empty());
             unsafe { device.create_command_pool(&command_pool_info, None)? }
@@ -528,7 +525,7 @@ impl Drop for VulkanContext {
 }
 
 struct Swapchain {
-    loader: SwapchainLoader,
+    loader: swapchain::Device,
     extent: vk::Extent2D,
     khr: vk::SwapchainKHR,
     images: Vec<vk::Image>,
@@ -625,12 +622,12 @@ fn create_vulkan_instance(
     entry: &Entry,
     window: &Window,
     title: &str,
-) -> Result<(Instance, DebugUtils, vk::DebugUtilsMessengerEXT), Box<dyn Error>> {
+) -> Result<(Instance, debug_utils::Instance, vk::DebugUtilsMessengerEXT), Box<dyn Error>> {
     log::debug!("Creating vulkan instance");
     // Vulkan instance
     let app_name = CString::new(title)?;
     let engine_name = CString::new("No Engine")?;
-    let app_info = vk::ApplicationInfo::builder()
+    let app_info = vk::ApplicationInfo::default()
         .application_name(app_name.as_c_str())
         .application_version(vk::make_api_version(0, 0, 1, 0))
         .engine_name(engine_name.as_c_str())
@@ -638,17 +635,18 @@ fn create_vulkan_instance(
         .api_version(vk::make_api_version(0, 1, 0, 0));
 
     let mut extension_names =
-        ash_window::enumerate_required_extensions(window.raw_display_handle())?.to_vec();
-    extension_names.push(DebugUtils::name().as_ptr());
+        ash_window::enumerate_required_extensions(window.display_handle().unwrap().into())?
+            .to_vec();
+    extension_names.push(debug_utils::NAME.as_ptr());
 
-    let instance_create_info = vk::InstanceCreateInfo::builder()
+    let instance_create_info = vk::InstanceCreateInfo::default()
         .application_info(&app_info)
         .enabled_extension_names(&extension_names);
 
     let instance = unsafe { entry.create_instance(&instance_create_info, None)? };
 
     // Vulkan debug report
-    let create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
+    let create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
         .flags(vk::DebugUtilsMessengerCreateFlagsEXT::empty())
         .message_severity(
             vk::DebugUtilsMessageSeverityFlagsEXT::INFO
@@ -661,7 +659,7 @@ fn create_vulkan_instance(
                 | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
         )
         .pfn_user_callback(Some(vulkan_debug_callback));
-    let debug_utils = DebugUtils::new(entry, &instance);
+    let debug_utils = debug_utils::Instance::new(entry, &instance);
     let debug_utils_messenger =
         unsafe { debug_utils.create_debug_utils_messenger(&create_info, None)? };
 
@@ -688,7 +686,7 @@ unsafe extern "system" fn vulkan_debug_callback(
 
 fn create_vulkan_physical_device_and_get_graphics_and_present_qs_indices(
     instance: &Instance,
-    surface: &Surface,
+    surface: &surface::Instance,
     surface_khr: vk::SurfaceKHR,
 ) -> Result<(vk::PhysicalDevice, u32, u32), Box<dyn Error>> {
     log::debug!("Creating vulkan physical device");
@@ -734,9 +732,9 @@ fn create_vulkan_physical_device_and_get_graphics_and_present_qs_indices(
                     .enumerate_device_extension_properties(device)
                     .expect("Failed to get device ext properties")
             };
-            let extention_support = extension_props.iter().any(|ext| {
+            let extension_support = extension_props.iter().any(|ext| {
                 let name = unsafe { CStr::from_ptr(ext.extension_name.as_ptr()) };
-                SwapchainLoader::name() == name
+                swapchain::NAME == name
             });
 
             // Does the device have available formats for the given surface
@@ -755,7 +753,7 @@ fn create_vulkan_physical_device_and_get_graphics_and_present_qs_indices(
 
             graphics.is_some()
                 && present.is_some()
-                && extention_support
+                && extension_support
                 && !formats.is_empty()
                 && !present_modes.is_empty()
         })
@@ -785,17 +783,16 @@ fn create_vulkan_device_and_graphics_and_present_qs(
         indices
             .iter()
             .map(|index| {
-                vk::DeviceQueueCreateInfo::builder()
+                vk::DeviceQueueCreateInfo::default()
                     .queue_family_index(*index)
                     .queue_priorities(&queue_priorities)
-                    .build()
             })
             .collect::<Vec<_>>()
     };
 
-    let device_extensions_ptrs = [SwapchainLoader::name().as_ptr()];
+    let device_extensions_ptrs = [swapchain::NAME.as_ptr()];
 
-    let device_create_info = vk::DeviceCreateInfo::builder()
+    let device_create_info = vk::DeviceCreateInfo::default()
         .queue_create_infos(&queue_create_infos)
         .enabled_extension_names(&device_extensions_ptrs);
 
@@ -807,7 +804,7 @@ fn create_vulkan_device_and_graphics_and_present_qs(
 }
 
 type CreateSwapchainResult = (
-    SwapchainLoader,
+    swapchain::Device,
     vk::SwapchainKHR,
     vk::Extent2D,
     vk::Format,
@@ -895,7 +892,7 @@ fn create_vulkan_swapchain(
         vulkan_context.present_q_index,
     ];
     let create_info = {
-        let mut builder = vk::SwapchainCreateInfoKHR::builder()
+        let mut builder = vk::SwapchainCreateInfoKHR::default()
             .surface(vulkan_context.surface_khr)
             .min_image_count(image_count)
             .image_format(format.format)
@@ -919,7 +916,7 @@ fn create_vulkan_swapchain(
             .clipped(true)
     };
 
-    let swapchain = SwapchainLoader::new(&vulkan_context.instance, &vulkan_context.device);
+    let swapchain = swapchain::Device::new(&vulkan_context.instance, &vulkan_context.device);
     let swapchain_khr = unsafe { swapchain.create_swapchain(&create_info, None)? };
 
     // Swapchain images and image views
@@ -927,7 +924,7 @@ fn create_vulkan_swapchain(
     let views = images
         .iter()
         .map(|image| {
-            let create_info = vk::ImageViewCreateInfo::builder()
+            let create_info = vk::ImageViewCreateInfo::default()
                 .image(*image)
                 .view_type(vk::ImageViewType::TYPE_2D)
                 .format(format.format)
@@ -958,26 +955,23 @@ fn create_vulkan_render_pass(
     format: vk::Format,
 ) -> Result<vk::RenderPass, Box<dyn Error>> {
     log::debug!("Creating vulkan render pass");
-    let attachment_descs = [vk::AttachmentDescription::builder()
+    let attachment_descs = [vk::AttachmentDescription::default()
         .format(format)
         .samples(vk::SampleCountFlags::TYPE_1)
         .load_op(vk::AttachmentLoadOp::CLEAR)
         .store_op(vk::AttachmentStoreOp::STORE)
         .initial_layout(vk::ImageLayout::UNDEFINED)
-        .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
-        .build()];
+        .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)];
 
-    let color_attachment_refs = [vk::AttachmentReference::builder()
+    let color_attachment_refs = [vk::AttachmentReference::default()
         .attachment(0)
-        .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-        .build()];
+        .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)];
 
-    let subpass_descs = [vk::SubpassDescription::builder()
+    let subpass_descs = [vk::SubpassDescription::default()
         .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-        .color_attachments(&color_attachment_refs)
-        .build()];
+        .color_attachments(&color_attachment_refs)];
 
-    let subpass_deps = [vk::SubpassDependency::builder()
+    let subpass_deps = [vk::SubpassDependency::default()
         .src_subpass(vk::SUBPASS_EXTERNAL)
         .dst_subpass(0)
         .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
@@ -985,10 +979,9 @@ fn create_vulkan_render_pass(
         .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
         .dst_access_mask(
             vk::AccessFlags::COLOR_ATTACHMENT_READ | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-        )
-        .build()];
+        )];
 
-    let render_pass_info = vk::RenderPassCreateInfo::builder()
+    let render_pass_info = vk::RenderPassCreateInfo::default()
         .attachments(&attachment_descs)
         .subpasses(&subpass_descs)
         .dependencies(&subpass_deps);
@@ -1007,7 +1000,7 @@ fn create_vulkan_framebuffers(
         .iter()
         .map(|view| [*view])
         .map(|attachments| {
-            let framebuffer_info = vk::FramebufferCreateInfo::builder()
+            let framebuffer_info = vk::FramebufferCreateInfo::default()
                 .render_pass(render_pass)
                 .attachments(&attachments)
                 .width(extent.width)
@@ -1032,10 +1025,10 @@ fn record_command_buffers(
     unsafe { device.reset_command_pool(command_pool, vk::CommandPoolResetFlags::empty())? };
 
     let command_buffer_begin_info =
-        vk::CommandBufferBeginInfo::builder().flags(vk::CommandBufferUsageFlags::SIMULTANEOUS_USE);
+        vk::CommandBufferBeginInfo::default().flags(vk::CommandBufferUsageFlags::SIMULTANEOUS_USE);
     unsafe { device.begin_command_buffer(command_buffer, &command_buffer_begin_info)? };
 
-    let render_pass_begin_info = vk::RenderPassBeginInfo::builder()
+    let render_pass_begin_info = vk::RenderPassBeginInfo::default()
         .render_pass(render_pass)
         .framebuffer(framebuffer)
         .render_area(vk::Rect2D {

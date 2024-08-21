@@ -23,15 +23,14 @@ pub fn create_vulkan_descriptor_set_layout(
     device: &Device,
 ) -> RendererResult<vk::DescriptorSetLayout> {
     log::debug!("Creating vulkan descriptor set layout");
-    let bindings = [vk::DescriptorSetLayoutBinding::builder()
+    let bindings = [vk::DescriptorSetLayoutBinding::default()
         .binding(0)
         .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
         .descriptor_count(1)
-        .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-        .build()];
+        .stage_flags(vk::ShaderStageFlags::FRAGMENT)];
 
     let descriptor_set_create_info =
-        vk::DescriptorSetLayoutCreateInfo::builder().bindings(&bindings);
+        vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
 
     unsafe { Ok(device.create_descriptor_set_layout(&descriptor_set_create_info, None)?) }
 }
@@ -50,7 +49,7 @@ pub(crate) fn create_vulkan_pipeline_layout(
     }];
 
     let descriptor_set_layouts = [descriptor_set_layout];
-    let layout_info = vk::PipelineLayoutCreateInfo::builder()
+    let layout_info = vk::PipelineLayoutCreateInfo::default()
         .set_layouts(&descriptor_set_layouts)
         .push_constant_ranges(&push_const_range);
     let pipeline_layout = unsafe { device.create_pipeline_layout(&layout_info, None)? };
@@ -70,61 +69,55 @@ pub(crate) fn create_vulkan_pipeline(
     let fragment_shader_source = std::include_bytes!("../shaders/shader.frag.spv");
 
     let vertex_source = read_shader_from_source(vertex_shader_source)?;
-    let vertex_create_info = vk::ShaderModuleCreateInfo::builder().code(&vertex_source);
+    let vertex_create_info = vk::ShaderModuleCreateInfo::default().code(&vertex_source);
     let vertex_module = unsafe { device.create_shader_module(&vertex_create_info, None)? };
 
     let fragment_source = read_shader_from_source(fragment_shader_source)?;
-    let fragment_create_info = vk::ShaderModuleCreateInfo::builder().code(&fragment_source);
+    let fragment_create_info = vk::ShaderModuleCreateInfo::default().code(&fragment_source);
     let fragment_module = unsafe { device.create_shader_module(&fragment_create_info, None)? };
 
     let shader_states_infos = [
-        vk::PipelineShaderStageCreateInfo::builder()
+        vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::VERTEX)
             .module(vertex_module)
-            .name(&entry_point_name)
-            .build(),
-        vk::PipelineShaderStageCreateInfo::builder()
+            .name(&entry_point_name),
+        vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::FRAGMENT)
             .module(fragment_module)
-            .name(&entry_point_name)
-            .build(),
+            .name(&entry_point_name),
     ];
 
-    let binding_desc = [vk::VertexInputBindingDescription::builder()
+    let binding_desc = [vk::VertexInputBindingDescription::default()
         .binding(0)
         .stride(20)
-        .input_rate(vk::VertexInputRate::VERTEX)
-        .build()];
+        .input_rate(vk::VertexInputRate::VERTEX)];
     let attribute_desc = [
-        vk::VertexInputAttributeDescription::builder()
+        vk::VertexInputAttributeDescription::default()
             .binding(0)
             .location(0)
             .format(vk::Format::R32G32_SFLOAT)
-            .offset(0)
-            .build(),
-        vk::VertexInputAttributeDescription::builder()
+            .offset(0),
+        vk::VertexInputAttributeDescription::default()
             .binding(0)
             .location(1)
             .format(vk::Format::R32G32_SFLOAT)
-            .offset(8)
-            .build(),
-        vk::VertexInputAttributeDescription::builder()
+            .offset(8),
+        vk::VertexInputAttributeDescription::default()
             .binding(0)
             .location(2)
             .format(vk::Format::R8G8B8A8_UNORM)
-            .offset(16)
-            .build(),
+            .offset(16),
     ];
 
-    let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
+    let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default()
         .vertex_binding_descriptions(&binding_desc)
         .vertex_attribute_descriptions(&attribute_desc);
 
-    let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
+    let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::default()
         .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
         .primitive_restart_enable(false);
 
-    let rasterizer_info = vk::PipelineRasterizationStateCreateInfo::builder()
+    let rasterizer_info = vk::PipelineRasterizationStateCreateInfo::default()
         .depth_clamp_enable(false)
         .rasterizer_discard_enable(false)
         .polygon_mode(vk::PolygonMode::FILL)
@@ -138,18 +131,18 @@ pub(crate) fn create_vulkan_pipeline(
 
     let viewports = [Default::default()];
     let scissors = [Default::default()];
-    let viewport_info = vk::PipelineViewportStateCreateInfo::builder()
+    let viewport_info = vk::PipelineViewportStateCreateInfo::default()
         .viewports(&viewports)
         .scissors(&scissors);
 
-    let multisampling_info = vk::PipelineMultisampleStateCreateInfo::builder()
+    let multisampling_info = vk::PipelineMultisampleStateCreateInfo::default()
         .sample_shading_enable(false)
         .rasterization_samples(vk::SampleCountFlags::TYPE_1)
         .min_sample_shading(1.0)
         .alpha_to_coverage_enable(false)
         .alpha_to_one_enable(false);
 
-    let color_blend_attachments = [vk::PipelineColorBlendAttachmentState::builder()
+    let color_blend_attachments = [vk::PipelineColorBlendAttachmentState::default()
         .color_write_mask(
             vk::ColorComponentFlags::R
                 | vk::ColorComponentFlags::G
@@ -162,27 +155,25 @@ pub(crate) fn create_vulkan_pipeline(
         .color_blend_op(vk::BlendOp::ADD)
         .src_alpha_blend_factor(vk::BlendFactor::ONE)
         .dst_alpha_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
-        .alpha_blend_op(vk::BlendOp::ADD)
-        .build()];
-    let color_blending_info = vk::PipelineColorBlendStateCreateInfo::builder()
+        .alpha_blend_op(vk::BlendOp::ADD)];
+    let color_blending_info = vk::PipelineColorBlendStateCreateInfo::default()
         .logic_op_enable(false)
         .logic_op(vk::LogicOp::COPY)
         .attachments(&color_blend_attachments)
         .blend_constants([0.0, 0.0, 0.0, 0.0]);
 
-    let depth_stencil_state_create_info = vk::PipelineDepthStencilStateCreateInfo::builder()
+    let depth_stencil_state_create_info = vk::PipelineDepthStencilStateCreateInfo::default()
         .depth_test_enable(options.enable_depth_test)
         .depth_write_enable(options.enable_depth_write)
         .depth_compare_op(vk::CompareOp::ALWAYS)
         .depth_bounds_test_enable(false)
-        .stencil_test_enable(false)
-        .build();
+        .stencil_test_enable(false);
 
     let dynamic_states = [vk::DynamicState::SCISSOR, vk::DynamicState::VIEWPORT];
     let dynamic_states_info =
-        vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&dynamic_states);
+        vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
-    let pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
+    let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
         .stages(&shader_states_infos)
         .vertex_input_state(&vertex_input_info)
         .input_assembly_state(&input_assembly_info)
@@ -201,7 +192,7 @@ pub(crate) fn create_vulkan_pipeline(
     let color_attachment_formats = [dynamic_rendering.color_attachment_format];
     #[cfg(feature = "dynamic-rendering")]
     let mut rendering_info = {
-        let mut rendering_info = vk::PipelineRenderingCreateInfo::builder()
+        let mut rendering_info = vk::PipelineRenderingCreateInfo::default()
             .color_attachment_formats(&color_attachment_formats);
         if let Some(depth_attachment_format) = dynamic_rendering.depth_attachment_format {
             rendering_info = rendering_info.depth_attachment_format(depth_attachment_format);
@@ -246,7 +237,7 @@ pub fn create_vulkan_descriptor_pool(
         ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
         descriptor_count: 1,
     }];
-    let create_info = vk::DescriptorPoolCreateInfo::builder()
+    let create_info = vk::DescriptorPoolCreateInfo::default()
         .pool_sizes(&sizes)
         .max_sets(max_sets)
         .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET);
@@ -265,7 +256,7 @@ pub fn create_vulkan_descriptor_set(
 
     let set = {
         let set_layouts = [set_layout];
-        let allocate_info = vk::DescriptorSetAllocateInfo::builder()
+        let allocate_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(descriptor_pool)
             .set_layouts(&set_layouts);
 
@@ -279,12 +270,11 @@ pub fn create_vulkan_descriptor_set(
             image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         }];
 
-        let writes = [vk::WriteDescriptorSet::builder()
+        let writes = [vk::WriteDescriptorSet::default()
             .dst_set(set)
             .dst_binding(0)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .image_info(&image_info)
-            .build()];
+            .image_info(&image_info)];
         device.update_descriptor_sets(&writes, &[])
     }
 
@@ -385,7 +375,7 @@ mod texture {
             // Transition the image layout and copy the buffer into the image
             // and transition the layout again to be readable from fragment shader.
             {
-                let mut barrier = vk::ImageMemoryBarrier::builder()
+                let mut barrier = vk::ImageMemoryBarrier::default()
                     .old_layout(vk::ImageLayout::UNDEFINED)
                     .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
                     .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
@@ -399,8 +389,7 @@ mod texture {
                         layer_count: 1,
                     })
                     .src_access_mask(vk::AccessFlags::empty())
-                    .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                    .build();
+                    .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE);
 
                 unsafe {
                     device.cmd_pipeline_barrier(
@@ -414,7 +403,7 @@ mod texture {
                     )
                 };
 
-                let region = vk::BufferImageCopy::builder()
+                let region = vk::BufferImageCopy::default()
                     .buffer_offset(0)
                     .buffer_row_length(0)
                     .buffer_image_height(0)
@@ -429,8 +418,7 @@ mod texture {
                         width,
                         height,
                         depth: 1,
-                    })
-                    .build();
+                    });
                 unsafe {
                     device.cmd_copy_buffer_to_image(
                         command_buffer,
@@ -460,7 +448,7 @@ mod texture {
             }
 
             let image_view = {
-                let create_info = vk::ImageViewCreateInfo::builder()
+                let create_info = vk::ImageViewCreateInfo::default()
                     .image(image)
                     .view_type(vk::ImageViewType::TYPE_2D)
                     .format(vk::Format::R8G8B8A8_UNORM)
@@ -476,7 +464,7 @@ mod texture {
             };
 
             let sampler = {
-                let sampler_info = vk::SamplerCreateInfo::builder()
+                let sampler_info = vk::SamplerCreateInfo::default()
                     .mag_filter(vk::Filter::LINEAR)
                     .min_filter(vk::Filter::LINEAR)
                     .address_mode_u(vk::SamplerAddressMode::REPEAT)
@@ -523,7 +511,7 @@ mod texture {
         executor: F,
     ) -> RendererResult<R> {
         let command_buffer = {
-            let alloc_info = vk::CommandBufferAllocateInfo::builder()
+            let alloc_info = vk::CommandBufferAllocateInfo::default()
                 .level(vk::CommandBufferLevel::PRIMARY)
                 .command_pool(pool)
                 .command_buffer_count(1);
@@ -534,7 +522,7 @@ mod texture {
 
         // Begin recording
         {
-            let begin_info = vk::CommandBufferBeginInfo::builder()
+            let begin_info = vk::CommandBufferBeginInfo::default()
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
             unsafe { device.begin_command_buffer(command_buffer, &begin_info)? };
         }
@@ -547,9 +535,7 @@ mod texture {
 
         // Submit and wait
         {
-            let submit_info = vk::SubmitInfo::builder()
-                .command_buffers(&command_buffers)
-                .build();
+            let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
             let submit_infos = [submit_info];
             unsafe {
                 device.queue_submit(queue, &submit_infos, vk::Fence::null())?;
