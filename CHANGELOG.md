@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.0
+
+- Bump ash to 0.38 by @filnet in #41
+
 ## 1.13.0
 
 - Bump imgui to 0.12
