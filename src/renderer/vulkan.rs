@@ -183,7 +183,8 @@ pub(crate) fn create_vulkan_pipeline(
         .color_blend_state(&color_blending_info)
         .depth_stencil_state(&depth_stencil_state_create_info)
         .dynamic_state(&dynamic_states_info)
-        .layout(pipeline_layout);
+        .layout(pipeline_layout)
+        .subpass(options.subpass);
 
     #[cfg(not(feature = "dynamic-rendering"))]
     let pipeline_info = pipeline_info.render_pass(render_pass);
