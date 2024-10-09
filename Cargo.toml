@@ -7,7 +7,7 @@ homepage = "https://github.com/adrien-ben/imgui-rs-vulkan-renderer"
 repository = "https://github.com/adrien-ben/imgui-rs-vulkan-renderer"
 documentation = "https://docs.rs/imgui-rs-vulkan-renderer"
 license = "MIT"
-version = "1.14.0"
+version = "1.15.0"
 authors = ["Adrien Bennadji <adrien.bennadji@live.fr>"]
 edition = "2018"
 

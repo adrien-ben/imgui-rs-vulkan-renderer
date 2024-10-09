@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.0
+
+- Add options for subpass and multisampling @anas2660 in #47
+
 ## 1.14.0
 
 - Bump ash to 0.38 by @filnet in #41
