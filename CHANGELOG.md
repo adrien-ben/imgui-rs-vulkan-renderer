@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.15.0
+## 1.16.0
+
+- Rename Options::multisampling into Options::sample_count
+
+## 1.15.0 (yanked)
 
 - Add options for subpass and multisampling @anas2660 in #47
 
