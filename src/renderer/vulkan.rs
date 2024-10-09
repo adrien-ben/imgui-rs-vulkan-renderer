@@ -137,7 +137,7 @@ pub(crate) fn create_vulkan_pipeline(
 
     let multisampling_info = vk::PipelineMultisampleStateCreateInfo::default()
         .sample_shading_enable(false)
-        .rasterization_samples(vk::SampleCountFlags::TYPE_1)
+        .rasterization_samples(options.multisampling)
         .min_sample_shading(1.0)
         .alpha_to_coverage_enable(false)
         .alpha_to_one_enable(false);
@@ -183,7 +183,8 @@ pub(crate) fn create_vulkan_pipeline(
         .color_blend_state(&color_blending_info)
         .depth_stencil_state(&depth_stencil_state_create_info)
         .dynamic_state(&dynamic_states_info)
-        .layout(pipeline_layout);
+        .layout(pipeline_layout)
+        .subpass(options.subpass);
 
     #[cfg(not(feature = "dynamic-rendering"))]
     let pipeline_info = pipeline_info.render_pass(render_pass);

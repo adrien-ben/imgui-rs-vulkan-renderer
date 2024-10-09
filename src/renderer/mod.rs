@@ -42,6 +42,10 @@ pub struct Options {
     /// Note that depth writes are always disabled when enable_depth_test is false.
     /// See <https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPipelineDepthStencilStateCreateInfo.html>
     pub enable_depth_write: bool,
+    /// Subpass for the graphics pipeline.
+    pub subpass: u32,
+    /// Sample count for the graphics pipeline multisampling state
+    pub multisampling: vk::SampleCountFlags,
 }
 
 impl Default for Options {
@@ -50,6 +54,8 @@ impl Default for Options {
             in_flight_frames: 1,
             enable_depth_test: false,
             enable_depth_write: false,
+            subpass: 0,
+            multisampling: vk::SampleCountFlags::TYPE_1
         }
     }
 }
