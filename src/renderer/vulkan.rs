@@ -137,7 +137,7 @@ pub(crate) fn create_vulkan_pipeline(
 
     let multisampling_info = vk::PipelineMultisampleStateCreateInfo::default()
         .sample_shading_enable(false)
-        .rasterization_samples(options.multisampling)
+        .rasterization_samples(options.sample_count)
         .min_sample_shading(1.0)
         .alpha_to_coverage_enable(false)
         .alpha_to_one_enable(false);

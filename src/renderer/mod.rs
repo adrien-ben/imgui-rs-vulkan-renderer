@@ -45,7 +45,7 @@ pub struct Options {
     /// Subpass for the graphics pipeline.
     pub subpass: u32,
     /// Sample count for the graphics pipeline multisampling state
-    pub multisampling: vk::SampleCountFlags,
+    pub sample_count: vk::SampleCountFlags,
 }
 
 impl Default for Options {
@@ -55,7 +55,7 @@ impl Default for Options {
             enable_depth_test: false,
             enable_depth_write: false,
             subpass: 0,
-            multisampling: vk::SampleCountFlags::TYPE_1
+            sample_count: vk::SampleCountFlags::TYPE_1
         }
     }
 }
