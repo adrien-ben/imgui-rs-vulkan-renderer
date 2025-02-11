@@ -166,7 +166,7 @@ impl<A: App> System<A> {
                     vulkan_context.physical_device,
                 );
 
-                Allocator::new(allocator_create_info)?
+                unsafe { Allocator::new(allocator_create_info)? }
             };
 
             Renderer::with_vk_mem_allocator(
