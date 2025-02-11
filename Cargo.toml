@@ -14,7 +14,7 @@ edition = "2018"
 include = ["/src", "LICENSE", "README.md", "CHANGELOG.md"]
 
 [dependencies]
-thiserror = "1.0"
+thiserror = "2.0"
 log = "0.4"
 imgui = "^0.12"
 ash = { version = "0.38", default-features = false, features = ["debug"] }
